@@ -1,0 +1,46 @@
+# ── Unity가 자동으로 만드는 폴더 (절대 올리면 안 됨, 수 GB) ──
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# ── 코드 편집기(VS, Rider 등)가 만드는 파일 ──
+.vs/
+.vscode/
+.idea/
+.gradle/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# ── 빌드 결과물 / 패키지 파일 ──
+*.apk
+*.aab
+*.app
+*.unitypackage
+sysinfo.txt
+crashlytics-build.properties
+
+# ── 운영체제 찌꺼기 ──
+.DS_Store
+Thumbs.db
+desktop.ini

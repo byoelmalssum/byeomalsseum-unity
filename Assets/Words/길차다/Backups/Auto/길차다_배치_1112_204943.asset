@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36e74239f8b8e84ff3e6f328f40ed54b, type: 3}
+  m_Name: "\uAE38\uCC28\uB2E4_\uBC30\uCE58_1112_204943"
+  m_EditorClassIdentifier: Assembly-CSharp::Byeolmalsseum.LayoutBackup
+  word: "\uAE38\uCC28\uB2E4"
+  savedAt: 2026-11-12 20:49:43
+  entries:
+  - id: 0
+    isGroup: 1
+    localPosition: {x: -1.6367502, y: 1.7223121, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 1
+    isGroup: 1
+    localPosition: {x: 0.100124985, y: 1.73575, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 2
+    isGroup: 1
+    localPosition: {x: 1.7913747, y: 1.72, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 0:0
+    isGroup: 0
+    localPosition: {x: -0.36349988, y: 0.259624, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 0:1
+    isGroup: 0
+    localPosition: {x: 0.3850001, y: 0.26768804, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 0:2
+    isGroup: 0
+    localPosition: {x: -0.021499872, y: -0.52731204, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 1:0
+    isGroup: 0
+    localPosition: {x: -0.40687492, y: 0.01575005, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 1:1
+    isGroup: 0
+    localPosition: {x: 0.40687492, y: -0.015749931, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 2:0
+    isGroup: 0
+    localPosition: {x: -0.395625, y: -0.00000011920929, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 2:1
+    isGroup: 0
+    localPosition: {x: 0.3956251, y: 0, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}

@@ -1,2 +1,32 @@
-# Auto detect text files and perform LF normalization
+# 줄바꿈 자동 정리 (Windows/Mac 섞여 써도 안 꼬이게)
 * text=auto
+
+# Unity 텍스트 파일
+*.cs       text diff=csharp
+*.unity    text eol=lf
+*.prefab   text eol=lf
+*.mat      text eol=lf
+*.asset    text eol=lf
+*.meta     text eol=lf
+*.anim     text eol=lf
+*.controller text eol=lf
+
+# 바이너리 파일 (비교·병합하지 않음)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.psd  binary
+*.tga  binary
+*.exr  binary
+*.hdr  binary
+*.fbx  binary
+*.obj  binary
+*.blend binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.mp4  binary
+*.mov  binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary
