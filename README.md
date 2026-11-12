@@ -46,7 +46,7 @@
 ```
 ① 받기      Fetch origin → Pull origin       (Unity는 저장했거나 닫은 상태)
 ② 작업      Unity에서 Tools > 별말씀 > 공간 씬 만들기 · 열기 > 내 단어 → 작업 → Ctrl+S
-③ 확인      GitHub Desktop 왼쪽 Changes: 경로가 Assets/Words/내 단어/… 인지 확인
+③ 확인 ★   GitHub Desktop 왼쪽 Changes: 전부 Assets/Words/내 단어/… 인지 확인 (아래 표)
 ④ 기록      Summary 한 줄 쓰고 → Commit to main
 ⑤ 올리기    Push origin   ← 하루 끝엔 꼭!
 ```
@@ -55,11 +55,30 @@
 
 ---
 
+## ⭐ Commit 전 목록 확인 (가장 중요!)
+
+Commit 버튼 누르기 전 5초 — **목록이 전부 `Assets/Words/내 단어/`로 시작하나요?**
+
+| 목록에 이런 게 보이면 | 처리 |
+|---|---|
+| `Words/내 단어` 안의 파일 (`.meta` 포함) | ✅ 체크 그대로 |
+| `Words/다른 단어`의 파일 | ❌ 우클릭 → **Discard changes** (남의 씬을 실수로 저장한 것) |
+| `ProjectSettings`, `Packages` | ⚠️ **체크 해제** (Unity가 저절로 바꾼 경우가 많음, 계속 뜨면 Discard) |
+| `Assets/Byeolmalsseum` (공용 코드) | ⚠️ 체크 해제 → 물어보기 (공지하고 고친 거면 OK) |
+| `Assets` 바로 밑 새 폴더 (에셋 Import) | ⚠️ 체크 해제 → 내 단어 폴더 안으로 옮기기 |
+| 파일 수천~수만 개 / `Library` | 🚫 Commit 금지 → 바로 알리기 |
+
+- **체크 해제** = 이번엔 안 올림 (내 컴퓨터엔 남아서 목록에 계속 뜸)
+- **Discard changes** = 내 변경 취소, 받은 상태로 되돌림 (휴지통으로 감)
+- 애초에 막으려면: Unity에서 Ctrl+S 전에 Hierarchy 맨 위 씬 이름이 **내 단어_공간**인지 확인!
+
+---
+
 ## ✅ 규칙
 
 1. **시작 전 Pull, 끝나면 Commit → Push** — 며칠씩 쌓아두지 않기
 2. **내 `Assets/Words/내 단어` 폴더만 수정** — 남의 씬은 구경만, 저장(Ctrl+S) 금지
-3. **Commit 전에 목록 훑어보기** — 내 폴더 밖 파일은 체크 해제하고 물어보기
+3. **Commit 전에 목록 훑어보기** ★ — 내 폴더 밖은 체크 해제, 실수로 저장한 남의 파일은 Discard changes
 4. **공용 코드(`Assets/Byeolmalsseum`) 수정 전엔 단톡방 공지** — "나 ○○ 고칠게"
 5. **`ProjectSettings`, `Packages`(패키지 설치)는 담당자만**
 6. **에셋 스토어 등 외부 에셋은 Import 후 내 폴더 안으로 옮기기**
