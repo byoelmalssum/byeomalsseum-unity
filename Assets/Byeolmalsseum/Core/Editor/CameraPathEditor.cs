@@ -9,6 +9,7 @@ namespace Byeolmalsseum.EditorTools
         public override void OnInspectorGUI()
         {
             var path = (CameraPath)target;
+            EditorGUILayout.HelpBox("v4부터 체험은 WASD로 날아다니는 방식이라 카메라 경로는 쓰지 않아요.\n'[별말씀] 단어' 인스펙터에서 '체험 시작 지점'을 만든 뒤 이 오브젝트는 지워도 돼요.", MessageType.Warning);
             EditorGUILayout.HelpBox(
                 "자식 오브젝트 = 경로 점 (위에서부터 순서대로).\n" +
                 "• 이 오브젝트를 선택하면 Scene 뷰에서 모든 점을 바로 끌어 옮길 수 있어요.\n" +
@@ -16,9 +17,6 @@ namespace Byeolmalsseum.EditorTools
                 "• 점 삭제: 하이어라키에서 Delete / 순서 바꾸기: 하이어라키에서 드래그", MessageType.None);
 
             EditorGUILayout.LabelField($"점 {path.PointCount}개 · 한 바퀴 길이 {path.Length:0.0} m");
-            var ws = path.GetComponentInParent<WordSpace>();
-            if (ws && ws.experienceCamera && ws.experienceCamera.speed > 0)
-                EditorGUILayout.LabelField($"한 바퀴 시간 ≈ {path.Length / ws.experienceCamera.speed:0} 초 (속도 {ws.experienceCamera.speed} m/s)");
 
             using (new EditorGUILayout.HorizontalScope())
             {

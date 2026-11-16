@@ -49,13 +49,53 @@ namespace Byeolmalsseum.EditorTools
                     ws.workCamera.transform.SetPositionAndRotation(sc.position, sc.rotation);
                     SetWork(ws, true);
                 }
-                if (GUILayout.Button("체험 카메라를 경로 시작점에 놓기") && ws.experienceCamera)
-                {
-                    Undo.RecordObject(ws.experienceCamera.transform, "체험 카메라 이동");
-                    ws.experienceCamera.PlaceAtStart();
-                }
             }
             EditorGUILayout.LabelField("플레이 중에는 Tab 키로 전환", EditorStyles.miniLabel);
+
+            // ── 체험 시작 지점 · 이동 범위
+            Section("체험 시작 지점 · 이동 범위");
+            var ec = ws.experienceCamera;
+            using (new EditorGUI.DisabledScope(playing || ec == null))
+            {
+                if (ec != null && ec.startPoint == null)
+                {
+                    EditorGUILayout.HelpBox("시작 지점이 없어요 (예전 버전 씬). 버튼을 누르면 지금 체험 카메라 자리에 만들어져요.\n그다음 '체험 카메라 경로'는 지워도 돼요.", MessageType.Warning);
+                    if (GUILayout.Button("체험 시작 지점 만들기", GUILayout.Height(26)))
+                    {
+                        ec.PlaceAtStart();
+                        var go = new GameObject("체험 시작 지점");
+                        Undo.RegisterCreatedObjectUndo(go, "시작 지점 만들기");
+                        go.transform.SetParent(ws.transform, false);
+                        go.transform.SetPositionAndRotation(ec.transform.position, ec.transform.rotation);
+                        Undo.RecordObject(ec, "시작 지점 연결");
+                        ec.startPoint = go.transform;
+                        Selection.activeGameObject = go;
+                    }
+                }
+                else if (ec != null)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        if (GUILayout.Button("시작 지점 선택")) Selection.activeGameObject = ec.startPoint.gameObject;
+                        if (GUILayout.Button("지금 Scene 뷰 시점으로") && SceneView.lastActiveSceneView)
+                        {
+                            var sc = SceneView.lastActiveSceneView.camera.transform;
+                            Undo.RecordObject(ec.startPoint, "시작 지점 이동");
+                            ec.startPoint.SetPositionAndRotation(sc.position, sc.rotation);
+                        }
+                    }
+                    if (GUILayout.Button("체험 카메라를 시작 지점에 놓기 (Game 뷰로 확인)"))
+                    {
+                        Undo.RecordObject(ec.transform, "체험 카메라 이동");
+                        ec.PlaceAtStart();
+                    }
+                }
+            }
+            var mb = ws.ComputeMoveBounds();
+            EditorGUILayout.LabelField(mb.HasValue
+                ? $"이동 범위: 가로 {mb.Value.size.x:0}m × 높이 {mb.Value.size.y:0}m × 세로 {mb.Value.size.z:0}m ({ws.boundsMode})"
+                : "이동 범위: 제한 없음", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("이 오브젝트를 선택하면 Scene 뷰에 하늘색 상자로 범위가 보여요.", EditorStyles.miniLabel);
 
             // ── 백업
             Section("백업 (공간 날아감 방지)");
