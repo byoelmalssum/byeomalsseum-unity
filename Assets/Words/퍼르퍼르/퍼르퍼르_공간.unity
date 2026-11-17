@@ -2207,7 +2207,7 @@ MonoBehaviour:
   skipIntro: 0
   endButtonText: "\uCCB4\uD5D8 \uC885\uB8CC"
   endButtonDelay: 0
-  nextSceneName: 
+  nextSceneName: "\uC601\uC218\uC99D"
   onExperienceFinished:
     m_PersistentCalls:
       m_Calls: []
