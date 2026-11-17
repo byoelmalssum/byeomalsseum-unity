@@ -1,0 +1,97 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36e74239f8b8e84ff3e6f328f40ed54b, type: 3}
+  m_Name: "\uB17C\uD2C0\uBC2D\uD2C0_\uBC30\uCE58_1112_214100"
+  m_EditorClassIdentifier: Assembly-CSharp::Byeolmalsseum.LayoutBackup
+  word: "\uB17C\uD2C0\uBC2D\uD2C0"
+  savedAt: 2026-11-12 21:41:01
+  entries:
+  - id: 0
+    isGroup: 1
+    localPosition: {x: -2.50175, y: 1.70251, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 1
+    isGroup: 1
+    localPosition: {x: -0.82175016, y: 1.685, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 2
+    isGroup: 1
+    localPosition: {x: 0.92074984, y: 1.703688, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 3
+    isGroup: 1
+    localPosition: {x: 2.5382502, y: 1.685, z: 0}
+    localRotation: {x: 0, y: 0, z: 0, w: 1}
+    localScale: {x: 1, y: 1, z: 1}
+  - id: 0:0
+    isGroup: 0
+    localPosition: {x: 0.007999897, y: 0.49268997, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 0:1
+    isGroup: 0
+    localPosition: {x: -0.018249989, y: 0.02757001, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 0:2
+    isGroup: 0
+    localPosition: {x: 0.010249853, y: -0.52026, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 1:0
+    isGroup: 0
+    localPosition: {x: 0.008000135, y: 0.49699998, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 1:1
+    isGroup: 0
+    localPosition: {x: -0.018250108, y: 0.01700008, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 1:2
+    isGroup: 0
+    localPosition: {x: 0.010249972, y: -0.51399994, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 2:0
+    isGroup: 0
+    localPosition: {x: -0.38075, y: 0.27037597, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 2:1
+    isGroup: 0
+    localPosition: {x: 0.43300003, y: 0.26231205, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 2:2
+    isGroup: 0
+    localPosition: {x: -0.052250206, y: -0.532688, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 3:0
+    isGroup: 0
+    localPosition: {x: 0.008000135, y: 0.49699998, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 3:1
+    isGroup: 0
+    localPosition: {x: -0.018250227, y: 0.01700008, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}
+  - id: 3:2
+    isGroup: 0
+    localPosition: {x: 0.010249853, y: -0.51399994, z: 0}
+    localRotation: {x: -0, y: -0, z: -0, w: 1}
+    localScale: {x: 1.5, y: 1.5, z: 1.5}

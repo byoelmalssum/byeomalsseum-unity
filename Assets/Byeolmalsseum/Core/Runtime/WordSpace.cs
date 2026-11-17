@@ -49,6 +49,16 @@ namespace Byeolmalsseum
         /// <summary>코드에서 받는 종료 신호. 인자 = 단어</summary>
         public static event Action<string> ExperienceFinished;
 
+        public enum BoundsMode { 자동, 직접지정, 제한없음 }
+
+        [Header("이동 범위")]
+        [Tooltip("자동: 공간에 놓인 물체 전체 크기 + 여유 (공간을 넓히면 범위도 같이 넓어짐)\n직접지정: 아래 중심·크기 값\n제한없음: 어디든 갈 수 있음")]
+        public BoundsMode boundsMode = BoundsMode.자동;
+        [Tooltip("자동 범위: 가장 바깥 물체보다 얼마나 더 나갈 수 있는지 (m). 아래쪽은 가장 낮은 물체 높이까지만")]
+        public float boundsPadding = 5f;
+        public Vector3 manualBoundsCenter = new Vector3(0, 5, 0);
+        public Vector3 manualBoundsSize = new Vector3(40, 15, 40);
+
         [Header("연결 (자동 생성됨)")]
         public Transform strokesRoot;
         public ExperienceCamera experienceCamera;
@@ -68,9 +78,11 @@ namespace Byeolmalsseum
         }
         readonly List<Flight> flights = new List<Flight>();
         Transform flightRoot;
-        GameObject endButton;
-        CanvasGroup endButtonGroup;
+        GameObject endButton, pausePanel, endLockedMsg;
+        Text hintText;
         Font uiFont;
+        bool paused;
+        float exploreStartTime;
 
         public JamoPiece[] Pieces => strokesRoot ? strokesRoot.GetComponentsInChildren<JamoPiece>(true) : new JamoPiece[0];
 
@@ -211,12 +223,53 @@ namespace Byeolmalsseum
         void BeginExplore()
         {
             CurrentPhase = Phase.체험;
+            exploreStartTime = Time.time;
             if (experienceCamera)
             {
+                experienceCamera.Limit = ComputeMoveBounds();
                 experienceCamera.MouseLookEnabled = true;
-                experienceCamera.BeginMoving();
+                experienceCamera.MovementEnabled = true;
             }
-            StartCoroutine(ShowEndButton());
+            if (!WorkCameraActive) SetPaused(false);
+            StartCoroutine(FadeHint());
+        }
+
+        // ───────────────────────────── 이동 범위
+        /// <summary>체험 카메라가 움직일 수 있는 범위. null = 제한 없음</summary>
+        public Bounds? ComputeMoveBounds()
+        {
+            if (boundsMode == BoundsMode.제한없음) return null;
+            if (boundsMode == BoundsMode.직접지정) return new Bounds(manualBoundsCenter, manualBoundsSize);
+
+            bool any = false;
+            Bounds raw = new Bounds();
+            foreach (var r in GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled || r is TrailRenderer || r is ParticleSystemRenderer) continue;
+                if (!any) { raw = r.bounds; any = true; } else raw.Encapsulate(r.bounds);
+            }
+            if (experienceCamera)
+            {
+                Vector3 sp = experienceCamera.startPoint ? experienceCamera.startPoint.position : experienceCamera.transform.position;
+                if (!any) { raw = new Bounds(sp, Vector3.zero); any = true; } else raw.Encapsulate(sp);
+            }
+            if (!any) return null;
+
+            float p = Mathf.Max(0, boundsPadding);
+            Vector3 min = raw.min - new Vector3(p, 0, p);
+            min.y = raw.min.y + .3f; // 가장 낮은 물체(바닥) 아래로는 못 내려감
+            Vector3 max = raw.max + new Vector3(p, p, p);
+            var b = new Bounds();
+            b.SetMinMax(min, Vector3.Max(max, min + Vector3.one * .1f));
+            return b;
+        }
+
+        void OnDrawGizmosSelected()
+        {
+            var b = ComputeMoveBounds();
+            if (!b.HasValue) return;
+            Gizmos.color = new Color(.3f, 1f, 1f, .8f);
+            Gizmos.DrawWireCube(b.Value.center, b.Value.size);
         }
 
         TrailRenderer AddTrail(Flight f)
@@ -249,7 +302,10 @@ namespace Byeolmalsseum
         {
             if (CurrentPhase == Phase.종료) return;
             CurrentPhase = Phase.종료;
-            if (endButton) endButton.SetActive(false);
+            if (pausePanel) pausePanel.SetActive(false);
+            if (hintText) hintText.gameObject.SetActive(false);
+            ReleaseCursor();
+            if (experienceCamera) { experienceCamera.MovementEnabled = false; experienceCamera.MouseLookEnabled = false; }
             Debug.Log($"[별말씀] 체험 종료: {word}");
             LastFinishedWord = word;
             onExperienceFinished?.Invoke();
@@ -258,17 +314,43 @@ namespace Byeolmalsseum
                 UnityEngine.SceneManagement.SceneManager.LoadScene(nextSceneName);
         }
 
-        IEnumerator ShowEndButton()
+        // ───────────────────────────── ESC 메뉴 (일시정지)
+        /// <summary>true = 커서 보이고 메뉴 열림(체험 종료 버튼) / false = 커서 숨김, 이동·시선 조작</summary>
+        public void SetPaused(bool p)
         {
-            if (endButtonDelay > 0) yield return new WaitForSeconds(endButtonDelay);
-            if (!endButton) yield break;
-            endButton.SetActive(true);
-            for (float t = 0; t < 1f; t += Time.deltaTime)
+            paused = p;
+            if (experienceCamera) experienceCamera.Paused = p;
+            if (p) ReleaseCursor();
+            else { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; }
+            if (pausePanel)
             {
-                endButtonGroup.alpha = t;
+                pausePanel.SetActive(p);
+                bool canEnd = Time.time - exploreStartTime >= endButtonDelay;
+                if (endButton) endButton.SetActive(canEnd);
+                if (endLockedMsg) endLockedMsg.SetActive(!canEnd);
+            }
+        }
+
+        static void ReleaseCursor()
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
+        void OnDestroy() => ReleaseCursor();
+
+        IEnumerator FadeHint()
+        {
+            if (!hintText) yield break;
+            hintText.gameObject.SetActive(true);
+            Color c = hintText.color;
+            for (float t = 0; t < 8f; t += Time.deltaTime)
+            {
+                float a = t < 1f ? t : (t > 6f ? Mathf.Clamp01((8f - t) / 2f) : 1f);
+                hintText.color = new Color(c.r, c.g, c.b, a * .85f);
                 yield return null;
             }
-            endButtonGroup.alpha = 1;
+            hintText.gameObject.SetActive(false);
         }
 
         void BuildUI()
@@ -292,16 +374,36 @@ namespace Byeolmalsseum
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = .5f;
 
-            endButton = new GameObject("체험 종료 버튼", typeof(RectTransform), typeof(Image), typeof(Button), typeof(CanvasGroup), typeof(Outline));
-            endButton.transform.SetParent(canvasGo.transform, false);
+            // 조작 안내 (체험 시작 후 잠깐 보였다 사라짐)
+            hintText = MakeText(canvasGo.transform, "W A S D · 방향키  이동     마우스  둘러보기     ESC  메뉴", 24,
+                                new Vector2(.5f, 0), new Vector2(0, 70), new Vector2(1200, 50));
+            hintText.color = new Color(1, 1, 1, 0);
+            hintText.gameObject.SetActive(false);
+
+            // ESC 메뉴: 화면 전체를 덮는 반투명 판 (아무 데나 클릭하면 계속 둘러보기)
+            pausePanel = new GameObject("ESC 메뉴", typeof(RectTransform), typeof(Image), typeof(Button));
+            pausePanel.transform.SetParent(canvasGo.transform, false);
+            var prt = pausePanel.GetComponent<RectTransform>();
+            prt.anchorMin = Vector2.zero; prt.anchorMax = Vector2.one; prt.offsetMin = prt.offsetMax = Vector2.zero;
+            pausePanel.GetComponent<Image>().color = new Color(.02f, .03f, .08f, .55f);
+            var resume = pausePanel.GetComponent<Button>();
+            resume.transition = Selectable.Transition.None;
+            resume.onClick.AddListener(() => SetPaused(false));
+
+            MakeText(pausePanel.transform, "잠시 멈춤", 44, new Vector2(.5f, .5f), new Vector2(0, 130), new Vector2(800, 70));
+            MakeText(pausePanel.transform, "계속 둘러보려면 화면을 클릭하거나 ESC를 누르세요", 24, new Vector2(.5f, .5f), new Vector2(0, 70), new Vector2(1200, 50))
+                .color = new Color(1, 1, 1, .75f);
+            endLockedMsg = MakeText(pausePanel.transform, "조금 더 둘러본 뒤에 체험을 끝낼 수 있어요", 22, new Vector2(.5f, .5f), new Vector2(0, -30), new Vector2(1000, 50)).gameObject;
+
+            endButton = new GameObject("체험 종료 버튼", typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline));
+            endButton.transform.SetParent(pausePanel.transform, false);
             var rt = endButton.GetComponent<RectTransform>();
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1, 0);
-            rt.anchoredPosition = new Vector2(-64, 64);
-            rt.sizeDelta = new Vector2(240, 72);
-            var img = endButton.GetComponent<Image>();
-            img.color = new Color(.08f, .09f, .16f, .7f);
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(.5f, .5f);
+            rt.anchoredPosition = new Vector2(0, -30);
+            rt.sizeDelta = new Vector2(260, 76);
+            endButton.GetComponent<Image>().color = new Color(.08f, .09f, .16f, .85f);
             var outline = endButton.GetComponent<Outline>();
-            outline.effectColor = new Color(1, 1, 1, .55f);
+            outline.effectColor = new Color(1, 1, 1, .6f);
             outline.effectDistance = new Vector2(1.5f, -1.5f);
             var btn = endButton.GetComponent<Button>();
             var cb = btn.colors;
@@ -310,25 +412,28 @@ namespace Byeolmalsseum
             cb.pressedColor = new Color(.6f, .7f, .9f);
             btn.colors = cb;
             btn.onClick.AddListener(FinishExperience);
+            MakeText(endButton.transform, endButtonText, 28, new Vector2(.5f, .5f), Vector2.zero, new Vector2(260, 76));
 
-            var txtGo = new GameObject("글자", typeof(RectTransform), typeof(Text));
-            txtGo.transform.SetParent(endButton.transform, false);
-            var trt = txtGo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = trt.offsetMax = Vector2.zero;
-            var txt = txtGo.GetComponent<Text>();
-            txt.font = uiFont;
-            txt.text = endButtonText;
-            txt.fontSize = 28;
-            txt.alignment = TextAnchor.MiddleCenter;
-            txt.color = Color.white;
-            txt.raycastTarget = false;
-
-            endButtonGroup = endButton.GetComponent<CanvasGroup>();
-            endButtonGroup.alpha = 0;
-            endButton.SetActive(false);
+            pausePanel.SetActive(false);
         }
 
-        // ───────────────────────────── 작업용 카메라 전환 (플레이 중 Tab)
+        Text MakeText(Transform parent, string s, int size, Vector2 anchor, Vector2 pos, Vector2 boxSize)
+        {
+            var go = new GameObject("글자", typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = boxSize;
+            var t = go.GetComponent<Text>();
+            t.font = uiFont; t.text = s; t.fontSize = size;
+            t.alignment = TextAnchor.MiddleCenter;
+            t.color = Color.white;
+            t.raycastTarget = false;
+            return t;
+        }
+
+        // ───────────────────────────── 작업용 카메라 전환 (플레이 중 Tab, 에디터 전용)
         public bool WorkCameraActive => workCamera && workCamera.enabled;
 
         public void SetWorkCameraActive(bool on)
@@ -343,12 +448,26 @@ namespace Byeolmalsseum
             var el = experienceCamera.GetComponent<AudioListener>();
             if (wl) wl.enabled = on;
             if (el) el.enabled = !on;
+
+            if (!Application.isPlaying) return;
+            if (on)
+            {
+                experienceCamera.Paused = true;
+                if (pausePanel) pausePanel.SetActive(false);
+                ReleaseCursor();
+            }
+            else if (CurrentPhase == Phase.체험) SetPaused(false);
         }
 
         void Update()
         {
             // 작업용 카메라 전환은 에디터에서만 (전시용 빌드에서는 관람객이 Tab을 눌러도 무시)
             if (Application.isEditor && BmInput.Down(BmKey.Tab)) SetWorkCameraActive(!WorkCameraActive);
+
+            if (CurrentPhase != Phase.체험 || WorkCameraActive) return;
+            if (BmInput.Down(BmKey.Esc)) SetPaused(!paused);
+            // 에디터에서 ESC로 커서가 풀리거나 창 밖을 눌러 잠금이 풀리면 → 메뉴 열기
+            else if (!paused && Cursor.lockState != CursorLockMode.Locked) SetPaused(true);
         }
 
         GUIStyle hintStyle;

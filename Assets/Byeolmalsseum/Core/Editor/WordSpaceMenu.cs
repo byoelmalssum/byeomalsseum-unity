@@ -81,17 +81,11 @@ namespace Byeolmalsseum.EditorTools
             ground.transform.localScale = new Vector3(4, 1, 4);
             ground.GetComponent<Renderer>().sharedMaterial = GroundMaterial(word);
 
-            // 카메라 경로 (기본: 원형 4점)
-            var pathGo = new GameObject("체험 카메라 경로");
-            pathGo.transform.SetParent(root.transform, false);
-            var path = pathGo.AddComponent<CameraPath>();
-            Vector3[] pts = { new Vector3(0, 1.6f, -10), new Vector3(9, 1.8f, -2), new Vector3(4, 2.2f, 8), new Vector3(-7, 1.8f, 5) };
-            for (int i = 0; i < pts.Length; i++)
-            {
-                var p = new GameObject($"경로점 {i + 1}").transform;
-                p.SetParent(pathGo.transform, false);
-                p.localPosition = pts[i];
-            }
+            // 체험 시작 지점 (글자가 이 앞에 나타나고, 여기서부터 날아다니며 체험)
+            var startGo = new GameObject("체험 시작 지점");
+            startGo.transform.SetParent(root.transform, false);
+            startGo.transform.position = new Vector3(0, 1.6f, -10);
+            startGo.transform.rotation = Quaternion.LookRotation(new Vector3(0, 2.2f, 0) - startGo.transform.position, Vector3.up);
 
             // 체험 카메라
             var ecGo = new GameObject("체험 카메라", typeof(Camera), typeof(AudioListener));
@@ -100,7 +94,7 @@ namespace Byeolmalsseum.EditorTools
             var ecCam = ecGo.GetComponent<Camera>();
             ecCam.fieldOfView = 60; ecCam.nearClipPlane = .05f;
             var ec = ecGo.AddComponent<ExperienceCamera>();
-            ec.path = path;
+            ec.startPoint = startGo.transform;
             ws.experienceCamera = ec;
 
             // 작업용 카메라 (기본 꺼짐)

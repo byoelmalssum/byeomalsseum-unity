@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 namespace Byeolmalsseum
 {
-    public enum BmKey { W, A, S, D, Q, E, Shift, Tab }
+    public enum BmKey { W, A, S, D, Q, E, Shift, Tab, Up, Down, Left, Right, Space, Ctrl, Esc }
 
     /// <summary>새 Input System / 예전 Input 어느 쪽이 켜져 있어도 동작하도록 감싼 입력</summary>
     public static class BmInput
@@ -62,10 +62,19 @@ namespace Byeolmalsseum
                 case BmKey.E: return kb.eKey.isPressed;
                 case BmKey.Shift: return kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
                 case BmKey.Tab: return kb.tabKey.isPressed;
+                case BmKey.Up: return kb.upArrowKey.isPressed;
+                case BmKey.Down: return kb.downArrowKey.isPressed;
+                case BmKey.Left: return kb.leftArrowKey.isPressed;
+                case BmKey.Right: return kb.rightArrowKey.isPressed;
+                case BmKey.Space: return kb.spaceKey.isPressed;
+                case BmKey.Ctrl: return kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed;
+                case BmKey.Esc: return kb.escapeKey.isPressed;
             }
             return false;
 #else
-            return Input.GetKey(ToKeyCode(k)) || (k == BmKey.Shift && Input.GetKey(KeyCode.RightShift));
+            return Input.GetKey(ToKeyCode(k))
+                || (k == BmKey.Shift && Input.GetKey(KeyCode.RightShift))
+                || (k == BmKey.Ctrl && Input.GetKey(KeyCode.RightControl));
 #endif
         }
 
@@ -84,6 +93,13 @@ namespace Byeolmalsseum
                 case BmKey.E: return kb.eKey.wasPressedThisFrame;
                 case BmKey.Shift: return kb.leftShiftKey.wasPressedThisFrame;
                 case BmKey.Tab: return kb.tabKey.wasPressedThisFrame;
+                case BmKey.Up: return kb.upArrowKey.wasPressedThisFrame;
+                case BmKey.Down: return kb.downArrowKey.wasPressedThisFrame;
+                case BmKey.Left: return kb.leftArrowKey.wasPressedThisFrame;
+                case BmKey.Right: return kb.rightArrowKey.wasPressedThisFrame;
+                case BmKey.Space: return kb.spaceKey.wasPressedThisFrame;
+                case BmKey.Ctrl: return kb.leftCtrlKey.wasPressedThisFrame;
+                case BmKey.Esc: return kb.escapeKey.wasPressedThisFrame;
             }
             return false;
 #else
@@ -103,6 +119,13 @@ namespace Byeolmalsseum
                 case BmKey.Q: return KeyCode.Q;
                 case BmKey.E: return KeyCode.E;
                 case BmKey.Shift: return KeyCode.LeftShift;
+                case BmKey.Up: return KeyCode.UpArrow;
+                case BmKey.Down: return KeyCode.DownArrow;
+                case BmKey.Left: return KeyCode.LeftArrow;
+                case BmKey.Right: return KeyCode.RightArrow;
+                case BmKey.Space: return KeyCode.Space;
+                case BmKey.Ctrl: return KeyCode.LeftControl;
+                case BmKey.Esc: return KeyCode.Escape;
                 default: return KeyCode.Tab;
             }
         }
