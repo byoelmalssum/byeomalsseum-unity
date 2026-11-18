@@ -8,52 +8,69 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
-// [살천스럽다] 공간 자동 생성 도구
-// 쓰는 법: 살천스럽다_공간 씬 → '공간 (소품·조명 등 여기에)' 아래에 빈 오브젝트 → 이 스크립트 붙이기
-//          → Inspector의 버튼을 누름. (플레이 중엔 안 눌림)
-//  ① 빙원·설산   : 울퉁불퉁한 눈 땅, 눈 더미, 얼음 결정 무리, 둘레의 설산 언덕
-//  ② 주변 소품   : 얼어붙은 나무, 서리 바위, 반쯤 묻힌 울타리, 얼음 기둥
-//  ③ 고드름      : 자모의 가로획 아래에 고드름을 줄줄이
-//  ④ 눈·빛·돌풍  : 눈 / 땅 눈보라 / 카메라 눈보라 / 반짝임 파티클, 후처리 2개, 찬바람 구역(ㄹ·ㄹ·ㄷ), 가로등 빛(ㅏ·ㅏ·ㅂ)
-//  - 자모 배치는 절대 건드리지 않음. 자모가 놓인 자리를 읽어서 그 둘레를 채움.
-//  - 버튼마다 자기 그룹만 새로 바꿈. 생성된 것도 손으로 옮기고 지울 수 있음. Ctrl+Z 가능.
-//  - 생성 파일은 Assets/Words/살천스럽다/생성 폴더에 저장됨.
+// [살천스럽다] 공간 자동 생성 도구 v2 — 눈 쌓인 숲과 눈 소품 잔뜩
+// 쓰는 법: 살천스럽다_공간 씬 → '공간 (소품·조명 등 여기에)' 아래 빈 오브젝트 → 이 스크립트 붙이기 → Inspector 버튼.
+//  ① 땅·눈 언덕·산  : 눈이 두툼하게 쌓인 땅(높은 눈 언덕), 눈 더미, 바깥 둘레에 눈 덮인 산 몇 개
+//  ② 눈 숲          : 눈 쌓인 전나무 숲(무리 지어), 눈 덤불, 가지에 눈 얹힌 나무, 눈 덮인 바위, 얼음 결정
+//  ③ 눈 소품        : 눈사람(2단·3단, 목도리·모자), 큰 눈사람, 눈오리, 이글루, 장독대, 벤치, 가로등, 썰매,
+//                      눈덩이 더미, 삽 꽂힌 눈더미, 눈 쌓인 울타리 — 지나가는 길 양옆에 이야기처럼 배치
+//  ④ 자모 위 눈·고드름: 자모 윗면에 눈이 소복이, 가로획 아래 고드름, 자모 밑동에 눈더미 (글자 도착 후 자라남)
+//  ⑤ 눈·눈보라·후처리·돌풍
+//  - 자모 배치는 절대 건드리지 않음. 버튼마다 자기 그룹만 새로 바뀜. Ctrl+Z 가능.
+//  - 생성 파일: Assets/Words/살천스럽다/생성 (모양·재질). 재질 색은 거기서 바꾸면 다시 눌러도 유지됨.
 public class SalcheonSpace : MonoBehaviour
 {
+    [Header("분위기")]
+    [Tooltip("켜면: 매섭고 으스스한 쪽 (처진 입 눈사람, 까마귀, 끊긴 발자국, 꺼진 가로등, 어두운 안개…)\n끄면: 포근한 겨울 (웃는 눈사람, 눈오리, 따뜻한 이글루)")]
+    public bool scary = true;
+    [Tooltip("무서운 쪽: 눈사람이 안 볼 때 돌아보고 조금씩 다가옴")] public bool watchingSnowmen = true;
+    [Range(0f, 3f)] public float crowAmount = 1f;
+    [Range(0, 8)] public int footprintTrails = 4;
+
     [Header("공통")]
-    [Tooltip("숫자를 바꾸고 다시 누르면 다른 배치가 나와요")] public int seed = 7;
+    [Tooltip("숫자를 바꾸고 다시 누르면 다른 배치")] public int seed = 7;
     [Tooltip("자모·시작 지점 둘레로 얼마나 넓게 채울지 (m)")] public float margin = 30f;
-    [Tooltip("자모 둘레와 지나갈 길은 이 거리(m)만큼 비워 둠")] public float clearance = 6f;
+    [Tooltip("지나갈 길과 자모 둘레는 이만큼(m) 비워 둠")] public float clearance = 5f;
     [Tooltip("바람이 불어가는 방향 (눈·눈보라)")] public Vector3 windDirection = new Vector3(-1f, 0f, -0.3f);
 
-    [Header("① 빙원·설산")]
-    [Tooltip("땅의 울퉁불퉁함 (0이면 평평). 자모 밑과 지나갈 길은 늘 평평")] [Range(0f, 1f)] public float groundBumpiness = 0.6f;
-    [Tooltip("땅 높이 조절 (m). 눕혀 둔 자모가 눈에 묻히면 조금 내리기 (예: -0.2)")] public float groundOffset = 0f;
+    [Header("① 땅·눈 언덕·산")]
+    [Tooltip("눈 언덕 높이 (0이면 평평). 길과 자모 밑은 늘 평평")] [Range(0f, 1f)] public float snowDunes = 0.7f;
+    [Tooltip("땅 높이 조절 (m). 눕혀 둔 자모가 묻히면 조금 내리기")] public float groundOffset = 0f;
     [Range(0f, 3f)] public float moundAmount = 1f;
-    [Tooltip("얼음 결정 무리 양")] [Range(0f, 3f)] public float crystalAmount = 1f;
-    [Tooltip("둘레 설산 언덕 개수")] [Range(0, 40)] public int hillCount = 18;
-    public Vector2 hillHeight = new Vector2(15f, 45f);
-    [Tooltip("공간 가장자리에서 언덕까지 거리 (m). 안개가 짙으면 가까이")] public float hillDistance = 20f;
+    [Tooltip("바깥 둘레 산 개수 (0이면 없음)")] [Range(0, 20)] public int hillCount = 6;
+    public Vector2 hillHeight = new Vector2(10f, 24f);
+    [Tooltip("공간 가장자리에서 산까지 거리 (m)")] public float hillDistance = 25f;
 
-    [Header("② 주변 소품")]
-    [Range(0f, 3f)] public float treeAmount = 1f;
+    [Header("② 눈 숲")]
+    [Tooltip("전나무 양")] [Range(0f, 3f)] public float forestAmount = 1f;
+    public Vector2 treeHeight = new Vector2(5f, 14f);
+    [Range(0f, 3f)] public float bushAmount = 1f;
+    [Range(0f, 3f)] public float bareTreeAmount = 1f;
     [Range(0f, 3f)] public float rockAmount = 1f;
-    [Range(0f, 3f)] public float fenceAmount = 1f;
-    [Range(0f, 3f)] public float pillarAmount = 1f;
+    [Range(0f, 3f)] public float crystalAmount = 0.6f;
 
-    [Header("③ 고드름")]
-    [Tooltip("고드름 크기 배수")] public float icicleSize = 1f;
-    [Tooltip("고드름 사이 간격 (m)")] [Range(0.25f, 2f)] public float icicleSpacing = 0.55f;
-    [Tooltip("이 높이(m)보다 낮은 획 아래엔 안 달림 (바닥에 눕힌 자모 제외)")] public float icicleMinHeight = 1.2f;
+    [Header("③ 눈 소품")]
+    [Tooltip("길가 장면(눈사람 가족·벤치와 눈오리·장독대·이글루…) 사이 간격 (m)")] public float sceneSpacing = 20f;
+    [Tooltip("길가 가로등 간격 (m, 0이면 없음)")] public float lampSpacing = 16f;
+    [Tooltip("길 말고 들판 곳곳 눈사람·눈오리 양")] [Range(0f, 3f)] public float scatterAmount = 1f;
+    public bool giantSnowman = true;
+    [Range(0, 8)] public int fences = 3;
+
+    [Header("④ 자모 위 눈·고드름")]
+    public bool snowOnJamo = true;
+    public bool jamoDrifts = true;
+    public float icicleSize = 1f;
+    [Range(0.25f, 2f)] public float icicleSpacing = 0.55f;
+    [Tooltip("이 높이(m)보다 낮은 획엔 고드름 안 담")] public float icicleMinHeight = 1.2f;
     public int icicleMax = 1500;
 
-    [Header("④ 눈·눈보라·빛")]
+    [Header("⑤ 눈·눈보라·빛")]
     [Range(0f, 2f)] public float snowAmount = 1f;
     [Range(0f, 2f)] public float blizzardAmount = 1f;
     public bool makeLamps = true;
 
 #if UNITY_EDITOR
-    public void Build(int which) => SalcheonBuilder.Run(this, which);
+    public void Build(int which) { SalcheonBuilder.Run(this, which); }
 #endif
 }
 
@@ -64,15 +81,16 @@ public class SalcheonSpaceEditor : Editor
     public override void OnInspectorGUI()
     {
         var s = (SalcheonSpace)target;
-        EditorGUILayout.HelpBox("자모 배치는 건드리지 않고, 자모가 놓인 자리 둘레를 채워요.\n버튼마다 자기 그룹만 새로 바뀌고, Ctrl+Z로 되돌릴 수 있어요.\n누른 다음 Ctrl+S로 저장하세요.", MessageType.Info);
+        EditorGUILayout.HelpBox("자모는 건드리지 않고 둘레를 채워요. 버튼마다 자기 그룹만 새로 바뀌고 Ctrl+Z로 되돌릴 수 있어요.\n누른 다음 Ctrl+S로 저장!", MessageType.Info);
         using (new EditorGUI.DisabledScope(Application.isPlaying))
         {
-            if (GUILayout.Button("① 빙원·설산 만들기", GUILayout.Height(26))) s.Build(1);
-            if (GUILayout.Button("② 주변 소품 뿌리기", GUILayout.Height(26))) s.Build(2);
-            if (GUILayout.Button("③ 고드름 달기", GUILayout.Height(26))) s.Build(3);
-            if (GUILayout.Button("④ 눈·눈보라·후처리·돌풍·가로등", GUILayout.Height(26))) s.Build(4);
+            if (GUILayout.Button("① 땅·눈 언덕·산", GUILayout.Height(24))) s.Build(1);
+            if (GUILayout.Button("② 눈 숲 (전나무·덤불·바위)", GUILayout.Height(24))) s.Build(2);
+            if (GUILayout.Button("③ 눈 소품 (눈사람·눈오리·이글루·장독대…)", GUILayout.Height(24))) s.Build(3);
+            if (GUILayout.Button("④ 자모 위 눈·고드름", GUILayout.Height(24))) s.Build(4);
+            if (GUILayout.Button("⑤ 눈·눈보라·후처리·돌풍", GUILayout.Height(24))) s.Build(5);
             EditorGUILayout.Space(4);
-            if (GUILayout.Button("전부 한 번에 (①~④)", GUILayout.Height(30))) s.Build(0);
+            if (GUILayout.Button("전부 한 번에 (①~⑤)", GUILayout.Height(32))) s.Build(0);
             if (GUILayout.Button("생성물 모두 지우기")) s.Build(-1);
         }
         EditorGUILayout.Space(8);
@@ -88,23 +106,29 @@ public static class SalcheonBuilder
     const string OwnMatDir = "Assets/Words/살천스럽다/Materials";
     const string GenName = "살천 생성물";
     const string BgName = "살천스럽다 배경 (이동 범위 밖)";
+    const string SpaceName = "공간 (소품·조명 등 여기에)";
 
-    // ───────────────────────────── 준비
+    class Spot { public Vector2 p; public float r; public Spot(Vector2 p, float r) { this.p = p; this.r = r; } }
+
     class Ctx
     {
         public SalcheonSpace s;
         public WordSpace ws;
         public Transform gen, bg;
-        public Rect area;            // 채울 범위 (XZ)
+        public Rect area;
         public Vector2 center;
         public List<Bounds> jamo = new List<Bounds>();
         public List<Vector3> path = new List<Vector3>();
-        public Vector3 start;
+        public List<Spot> taken = new List<Spot>();
+        public Vector3 start, startForward;
         public float baseY, topY;
         public System.Random rng;
-        public float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
-        public int RI(int a, int b) => rng.Next(a, b);
+        public float R(float a, float b) { return a + (float)rng.NextDouble() * (b - a); }
+        public int RI(int a, int b) { return rng.Next(a, b); }
+        public bool Chance(float p) { return rng.NextDouble() < p; }
     }
+
+    static readonly string[] Names = { "①~⑤ 전부", "① 땅·눈 언덕·산", "② 눈 숲", "③ 눈 소품", "④ 자모 위 눈·고드름", "⑤ 눈·눈보라·후처리·돌풍" };
 
     public static void Run(SalcheonSpace s, int which)
     {
@@ -112,44 +136,66 @@ public static class SalcheonBuilder
         var ws = Object.FindAnyObjectByType<WordSpace>();
         if (ws == null) { EditorUtility.DisplayDialog("살천스럽다", "이 씬에 단어 공간이 없어요. 살천스럽다_공간 씬에서 눌러 주세요.", "확인"); return; }
 
-        string[] names = { "①~④ 전부", "① 빙원·설산", "② 주변 소품", "③ 고드름", "④ 눈·눈보라·후처리·돌풍·가로등" };
-        string what = which >= 0 && which < names.Length ? names[which] : "생성물 모두 지우기";
+        string what = which >= 0 && which < Names.Length ? Names[which] : "생성물 모두 지우기";
         string msg = which == -1 ? "자동으로 만든 것을 전부 지워요. (자모는 그대로)\nCtrl+Z로 되돌릴 수 있어요."
-                                 : $"{what}을(를) 만들어요.\n이미 만든 게 있으면 그 그룹만 새로 바뀌어요. 자모는 그대로예요.\n(Ctrl+Z로 되돌리기 가능)";
+                                 : what + "을(를) 만들어요.\n이미 만든 게 있으면 그 그룹만 새로 바뀌어요. 자모는 그대로예요.";
         if (!EditorUtility.DisplayDialog("살천스럽다", msg, "실행", "취소")) return;
 
         Undo.SetCurrentGroupName("살천스럽다 " + what);
         int undoGroup = Undo.GetCurrentGroup();
-
         var c = Prepare(s, ws);
-        if (which == -1)
+        try
         {
-            if (c.gen) Undo.DestroyObjectImmediate(c.gen.gameObject);
-            if (c.bg) Undo.DestroyObjectImmediate(c.bg.gameObject);
-            var floor = FindOldFloor(ws);
-            if (floor && !floor.gameObject.activeSelf) { Undo.RecordObject(floor.gameObject, "바닥"); floor.gameObject.SetActive(true); }
+            if (which == -1)
+            {
+                if (c.gen) Undo.DestroyObjectImmediate(c.gen.gameObject);
+                if (c.bg) Undo.DestroyObjectImmediate(c.bg.gameObject);
+                var floor = FindOldFloor(ws);
+                if (floor && !floor.gameObject.activeSelf) { Undo.RecordObject(floor.gameObject, "바닥"); floor.gameObject.SetActive(true); }
+            }
+            else
+            {
+                EnsureFolder(Dir); EnsureFolder(MatDir); EnsureFolder(MeshDir);
+                EnsureRoots(c);
+                int total = which == 0 ? 5 : 1, step = 0;
+                for (int b = 1; b <= 5; b++)
+                {
+                    if (which != 0 && which != b) continue;
+                    EditorUtility.DisplayProgressBar("살천스럽다", Names[b] + " 만드는 중…", (float)step++ / total);
+                    Step(Names[b], c, b);
+                }
+                EnsureRuntime(c);
+                AssetDatabase.SaveAssets();
+            }
         }
-        else
-        {
-            EnsureFolder(Dir); EnsureFolder(MatDir); EnsureFolder(MeshDir);
-            EnsureRoots(c);
-            if (which == 1 || which == 0) BuildField(c);
-            if (which == 2 || which == 0) BuildProps(c);
-            if (which == 3 || which == 0) BuildIcicles(c);
-            if (which == 4 || which == 0) BuildAtmosphere(c);
-            EnsureRuntime(c);
-            AssetDatabase.SaveAssets();
-        }
+        finally { EditorUtility.ClearProgressBar(); }
 
         Undo.CollapseUndoOperations(undoGroup);
         EditorSceneManager.MarkSceneDirty(ws.gameObject.scene);
-        Debug.Log($"[살천스럽다] {what} 완료. Ctrl+S로 저장하고 플레이해 보세요.");
+        Debug.Log("[살천스럽다] " + what + " 완료. Ctrl+S로 저장하고 플레이해 보세요.");
     }
 
+    static void Step(string name, Ctx c, int b)
+    {
+        try
+        {
+            if (b == 1) BuildGround(c);
+            else if (b == 2) BuildForest(c);
+            else if (b == 3) BuildProps(c);
+            else if (b == 4) BuildJamoSnow(c);
+            else if (b == 5) BuildAtmosphere(c);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[살천스럽다] '" + name + "' 만들다 문제가 생겨서 건너뛰었어요: " + e.Message + "\n" + e.StackTrace);
+        }
+    }
+
+    // ───────────────────────────── 준비
     static Ctx Prepare(SalcheonSpace s, WordSpace ws)
     {
         var c = new Ctx { s = s, ws = ws, rng = new System.Random(s.seed) };
-        var spaceRoot = ws.transform.Find("공간 (소품·조명 등 여기에)") ?? ws.transform;
+        var spaceRoot = SpaceRoot(ws);
         c.gen = spaceRoot.Find(GenName);
         var bgGo = GameObject.Find(BgName);
         c.bg = bgGo ? bgGo.transform : null;
@@ -167,11 +213,14 @@ public static class SalcheonBuilder
             if (!any) { all = r.bounds; any = true; } else all.Encapsulate(r.bounds);
         }
         var ec = ws.experienceCamera;
-        c.start = ec ? (ec.startPoint ? ec.startPoint.position : ec.transform.position) : ws.transform.position;
+        Transform st = ec ? (ec.startPoint ? ec.startPoint : ec.transform) : ws.transform;
+        c.start = st.position;
+        Vector3 f = st.forward; f.y = 0;
+        c.startForward = f.sqrMagnitude > 1e-4f ? f.normalized : Vector3.forward;
         if (!any) all = new Bounds(c.start, Vector3.one * 20f);
         all.Encapsulate(c.start);
 
-        // 지나갈 길: 시작 지점 → 가장 가까운 자모 → … (가까운 순서로 잇기)
+        // 지나갈 길: 시작 지점 → 가까운 자모 → …
         c.path.Add(c.start);
         var left = new List<Vector3>(centers);
         Vector3 cur = c.start;
@@ -189,85 +238,114 @@ public static class SalcheonBuilder
 
         var oldFloor = FindOldFloor(ws);
         c.baseY = (oldFloor ? oldFloor.position.y : ws.floorHeight) + s.groundOffset;
-        c.topY = Mathf.Max(25f, all.max.y + 5f);
-
+        c.topY = Mathf.Max(25f, all.max.y + 5f - c.baseY);
         float m = Mathf.Max(5f, s.margin);
         c.area = Rect.MinMaxRect(all.min.x - m, all.min.z - m, all.max.x + m, all.max.z + m);
         c.center = c.area.center;
         return c;
     }
 
+    static Transform SpaceRoot(WordSpace ws)
+    {
+        var t = ws.transform.Find(SpaceName);
+        return t ? t : ws.transform;
+    }
+
     static void EnsureRoots(Ctx c)
     {
         if (!c.gen)
         {
-            var spaceRoot = c.ws.transform.Find("공간 (소품·조명 등 여기에)") ?? c.ws.transform;
             var go = new GameObject(GenName);
             Undo.RegisterCreatedObjectUndo(go, "생성물");
-            go.transform.SetParent(spaceRoot, false);
-            go.transform.localPosition = Vector3.zero;
+            go.transform.SetParent(SpaceRoot(c.ws), false);
             c.gen = go.transform;
         }
         if (!c.bg)
         {
-            // 땅·언덕은 [별말씀] 바깥에 둬서 이동 범위 계산에 안 들어가게 함 (언덕까지 날아가지 않게)
+            // 땅·산은 [별말씀] 바깥 → 이동 범위 계산에 안 들어감
             var go = new GameObject(BgName);
             Undo.RegisterCreatedObjectUndo(go, "배경");
-            SceneManager_MoveToScene(go, c.ws.gameObject.scene);
+            if (go.scene != c.ws.gameObject.scene) UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(go, c.ws.gameObject.scene);
             c.bg = go.transform;
         }
     }
 
-    static void SceneManager_MoveToScene(GameObject go, UnityEngine.SceneManagement.Scene scene)
-    {
-        if (go.scene != scene) UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(go, scene);
-    }
-
-    static Transform Group(Transform parent, string name)
+    // 그룹을 새로 만들고, 다른 그룹에 이미 있는 것들의 자리를 '찬 자리'로 기록
+    static Transform Group(Ctx c, Transform parent, string name)
     {
         var old = parent.Find(name);
         if (old) Undo.DestroyObjectImmediate(old.gameObject);
         var go = new GameObject(name);
         Undo.RegisterCreatedObjectUndo(go, name);
         go.transform.SetParent(parent, false);
+        RefreshTaken(c);
         return go.transform;
     }
 
-    static Transform FindOldFloor(WordSpace ws) => ws.transform.Find("공간 (소품·조명 등 여기에)/바닥 (지워도 됨)");
+    static readonly string[] SkipTaken = { "파티클", "후처리", "찬바람 구역", "가로등 빛", "고드름", "자모 위 눈" };
+
+    static void RefreshTaken(Ctx c)
+    {
+        c.taken.Clear();
+        if (!c.gen) return;
+        foreach (Transform g in c.gen)
+        {
+            if (System.Array.IndexOf(SkipTaken, g.name) >= 0) continue;
+            foreach (Transform o in g)
+            {
+                var rs = o.GetComponentsInChildren<Renderer>();
+                if (rs == null || rs.Length == 0) continue;
+                Bounds b = rs[0].bounds;
+                foreach (var r in rs) if (!(r is ParticleSystemRenderer)) b.Encapsulate(r.bounds);
+                c.taken.Add(new Spot(Flat(b.center), Mathf.Min(Mathf.Max(b.extents.x, b.extents.z), 6f)));
+            }
+        }
+    }
+
+    static Transform FindOldFloor(WordSpace ws) { return ws.transform.Find(SpaceName + "/바닥 (지워도 됨)"); }
 
     // ───────────────────────────── 땅 높이 · 빈자리
     static float H(Ctx c, float x, float z)
     {
-        float amp = 0.4f * c.s.groundBumpiness;
+        float amp = 1.6f * c.s.snowDunes;
         if (amp <= 0) return c.baseY;
         float ox = c.s.seed * 13.1f, oz = c.s.seed * 7.7f;
-        float h = Mathf.PerlinNoise(x * 0.045f + ox, z * 0.045f + oz) * 0.75f
-                + Mathf.PerlinNoise(x * 0.17f + oz, z * 0.17f + ox) * 0.25f;
-        // 바람에 깎인 눈결 (바람 방향과 수직인 잔물결)
-        Vector3 w = c.s.windDirection; w.y = 0; if (w.sqrMagnitude < 1e-4f) w = Vector3.left; w.Normalize();
-        h += 0.18f * (0.5f + 0.5f * Mathf.Sin((x * w.x + z * w.z) * 1.3f + Mathf.PerlinNoise(x * 0.1f, z * 0.1f) * 4f));
-        // 지나가는 길은 평평하게
-        float dPath = DistToPath(c, x, z);
-        float flat = Mathf.SmoothStep(0.3f, 1f, Mathf.InverseLerp(c.s.clearance * 0.5f, c.s.clearance * 1.5f, dPath));
-        // 자모 밑(눕혀 둔 ㄹ 같은 것)은 완전히 평평하게 → 땅에 묻히지 않음
-        float dJ = DistToJamo(c, x, z);
-        flat = Mathf.Min(flat, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 4f, dJ)));
-        return c.baseY + h / 1.18f * amp * flat;
+        float h = Mathf.PerlinNoise(x * 0.028f + ox, z * 0.028f + oz) * 0.75f
+                + Mathf.PerlinNoise(x * 0.11f + oz, z * 0.11f + ox) * 0.25f;
+        Vector3 w = WindFlat(c);
+        h += 0.08f * Mathf.Sin((x * w.x + z * w.z) * 1.1f + Mathf.PerlinNoise(x * 0.1f, z * 0.1f) * 4f); // 바람에 깎인 눈결
+        h = Mathf.Max(0f, h - 0.15f);
+        // 길에서 멀어질수록, 자모에서 멀어질수록 높게 쌓임
+        float fPath = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(c.s.clearance * 0.6f, c.s.clearance + 25f, DistToPath(c, x, z)));
+        float fJamo = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 7f, DistToJamo(c, x, z)));
+        return c.baseY + h * amp * Mathf.Min(fPath, fJamo);
     }
 
-    static float DistToPath(Ctx c, float x, float z)
+    static Vector3 WindFlat(Ctx c)
     {
-        Vector2 p = new Vector2(x, z);
-        float best = float.MaxValue;
+        Vector3 w = c.s.windDirection; w.y = 0;
+        return w.sqrMagnitude < 1e-4f ? Vector3.left : w.normalized;
+    }
+
+    static Vector2 ClosestOnPath(Ctx c, Vector2 p)
+    {
+        Vector2 best = Flat(c.path[0]); float bd = float.MaxValue;
         for (int i = 0; i + 1 < c.path.Count; i++)
         {
             Vector2 a = Flat(c.path[i]), b = Flat(c.path[i + 1]);
             Vector2 ab = b - a;
             float t = ab.sqrMagnitude < 1e-6f ? 0 : Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
-            best = Mathf.Min(best, Vector2.Distance(p, a + ab * t));
+            Vector2 q = a + ab * t;
+            float d = (p - q).sqrMagnitude;
+            if (d < bd) { bd = d; best = q; }
         }
-        if (c.path.Count == 1) best = Vector2.Distance(p, Flat(c.path[0]));
         return best;
+    }
+
+    static float DistToPath(Ctx c, float x, float z)
+    {
+        var p = new Vector2(x, z);
+        return Vector2.Distance(p, ClosestOnPath(c, p));
     }
 
     static float DistToJamo(Ctx c, float x, float z)
@@ -282,85 +360,249 @@ public static class SalcheonBuilder
         return best;
     }
 
-    static bool Blocked(Ctx c, float x, float z, float extra)
+    static bool Free(Ctx c, float x, float z, float extra, float radius)
     {
         float cl = c.s.clearance + extra;
-        if (DistToPath(c, x, z) < cl) return true;
-        foreach (var b in c.jamo)
-        {
-            if (x > b.min.x - cl && x < b.max.x + cl && z > b.min.z - cl && z < b.max.z + cl) return true;
-        }
-        return false;
+        if (DistToPath(c, x, z) < cl + radius) return false;
+        if (DistToJamo(c, x, z) < cl * 0.6f + radius) return false;
+        var p = new Vector2(x, z);
+        foreach (var t in c.taken) if ((t.p - p).sqrMagnitude < (t.r + radius) * (t.r + radius)) return false;
+        return true;
     }
 
-    static bool TryPoint(Ctx c, float extra, out Vector3 p, Rect? region = null)
+    // 빈자리 하나 찾기 (찾으면 그 자리를 '찬 자리'로 기록)
+    static bool TryPoint(Ctx c, float extra, float radius, out Vector3 p, Rect? region = null)
     {
         Rect r = region ?? c.area;
         for (int i = 0; i < 40; i++)
         {
             float x = c.R(r.xMin, r.xMax), z = c.R(r.yMin, r.yMax);
-            if (Blocked(c, x, z, extra)) continue;
+            if (!Free(c, x, z, extra, radius)) continue;
             p = new Vector3(x, H(c, x, z), z);
+            c.taken.Add(new Spot(new Vector2(x, z), radius));
             return true;
         }
         p = Vector3.zero;
         return false;
     }
 
+    static bool TryNear(Ctx c, Vector2 around, float spread, float extra, float radius, out Vector3 p)
+    {
+        return TryPoint(c, extra, radius, out p, Rect.MinMaxRect(around.x - spread, around.y - spread, around.x + spread, around.y + spread));
+    }
+
     static int Count(Ctx c, float per1000, float amount)
     {
         float a = c.area.width * c.area.height / 1000f;
-        return Mathf.Clamp(Mathf.RoundToInt(a * per1000 * amount), 0, 400);
+        return Mathf.Clamp(Mathf.RoundToInt(a * per1000 * amount), 0, 600);
     }
 
-    // ───────────────────────────── ① 빙원·설산
-    static void BuildField(Ctx c)
+    static Quaternion FacePath(Ctx c, Vector3 p, float jitter)
     {
-        var snowMat = OwnOrNew("눈바닥", new Color32(223, 230, 237, 255), 0f, 0.05f);
-        var iceMat = OwnOrNew("얼음", new Color32(168, 216, 240, 204), 0.1f, 0.9f);
-        var rockMat = Mat("산 바위", new Color32(74, 90, 107, 255), 0f, 0.2f);
-        var capMat = Mat("눈 덮개", new Color32(232, 238, 244, 255), 0f, 0.15f);
+        Vector2 q = ClosestOnPath(c, Flat(p));
+        Vector3 d = new Vector3(q.x - p.x, 0, q.y - p.z);
+        if (d.sqrMagnitude < 1e-4f) d = -c.startForward;
+        return Quaternion.LookRotation(d.normalized, Vector3.up) * Quaternion.Euler(0, c.R(-jitter, jitter), 0);
+    }
 
-        // 땅
-        var groundG = Group(c.bg, "빙원 땅");
-        var gr = c.area; float pad = 60f;
-        var ground = GroundMesh(c, Rect.MinMaxRect(gr.xMin - pad, gr.yMin - pad, gr.xMax + pad, gr.yMax + pad));
-        ground = SaveMesh("빙원 땅", ground, true);
-        var gGo = Obj(groundG, "땅", ground, snowMat);
-        gGo.GetComponent<MeshRenderer>().receiveShadows = true;
+    // ───────────────────────────── 재질 묶음
+    class Mats
+    {
+        public Material snow, ground, ice, icicle, needle, bark, rock, stone, coal, carrot, metal, wood, redWood, onggi, lampBulb, warm, crow, print, deadBulb;
+        public bool scary;
+        public Material[] scarves, hats;
+    }
+
+    static Mats GetMats(Ctx c)
+    {
+        var m = new Mats();
+        m.scary = c.s.scary;
+        m.snow = Mat("눈", new Color32(240, 244, 250, 255), 0f, 0.3f);
+        m.ground = OwnOrNew("눈바닥", new Color32(223, 230, 237, 255), 0f, 0.05f);
+        m.ice = OwnOrNew("얼음", new Color32(168, 216, 240, 204), 0.1f, 0.9f);
+        m.icicle = OwnOrNew("고드름", new Color32(216, 240, 255, 217), 0.1f, 0.95f);
+        m.needle = m.scary ? Mat("전나무 잎 (어둠)", new Color32(22, 36, 36, 255), 0f, 0.1f) : Mat("전나무 잎", new Color32(38, 66, 58, 255), 0f, 0.15f);
+        m.bark = m.scary ? Mat("나무껍질 (어둠)", new Color32(34, 30, 30, 255), 0f, 0.1f) : Mat("나무껍질", new Color32(58, 48, 44, 255), 0f, 0.15f);
+        m.crow = Mat("까마귀", new Color32(16, 16, 20, 255), 0f, 0.55f);
+        m.print = Mat("발자국", new Color32(150, 162, 178, 255), 0f, 0.05f);
+        m.deadBulb = Mat("꺼진 전구", new Color32(58, 66, 76, 255), 0f, 0.6f);
+        m.rock = Mat("바위", new Color32(92, 104, 117, 255), 0f, 0.2f);
+        m.stone = Mat("장독대 돌", new Color32(128, 128, 124, 255), 0f, 0.15f);
+        m.coal = Mat("숯", new Color32(28, 28, 32, 255), 0f, 0.35f);
+        m.carrot = Mat("당근", new Color32(232, 118, 40, 255), 0f, 0.3f);
+        m.metal = Mat("쇠", new Color32(52, 60, 70, 255), 0.7f, 0.45f);
+        m.wood = Mat("나무 판자", new Color32(124, 90, 64, 255), 0f, 0.2f);
+        m.redWood = Mat("썰매", new Color32(176, 48, 44, 255), 0f, 0.35f);
+        m.onggi = Mat("옹기", new Color32(84, 52, 38, 255), 0f, 0.65f);
+        m.lampBulb = OwnOrNew("가로등 빛", new Color32(191, 228, 255, 255), 0f, 0.5f, new Color(0.75f, 0.9f, 1f) * 2f);
+        m.warm = Mat("이글루 불빛", new Color32(255, 196, 120, 255), 0f, 0.3f, new Color(1f, 0.62f, 0.3f) * 2.2f);
+        m.scarves = m.scary ? new[]
+        {
+            Mat("목도리 잿빛", new Color32(74, 76, 82, 255), 0f, 0.05f),
+            Mat("목도리 먹색", new Color32(36, 38, 44, 255), 0f, 0.05f),
+            Mat("목도리 바랜 빨강", new Color32(112, 34, 38, 255), 0f, 0.05f),
+        } : new[]
+        {
+            Mat("목도리 빨강", new Color32(186, 44, 52, 255), 0f, 0.1f),
+            Mat("목도리 남색", new Color32(44, 62, 112, 255), 0f, 0.1f),
+            Mat("목도리 겨자", new Color32(214, 160, 52, 255), 0f, 0.1f),
+            Mat("목도리 초록", new Color32(48, 112, 84, 255), 0f, 0.1f),
+        };
+        m.hats = new[] { m.metal, Mat("양동이 빨강", new Color32(160, 52, 48, 255), 0.4f, 0.5f) };
+        return m;
+    }
+
+    // ───────────────────────────── ① 땅·눈 언덕·산
+    static void BuildGround(Ctx c)
+    {
+        var M = GetMats(c);
+        var groundG = Group(c, c.bg, "눈 땅");
+        var gr = c.area; float pad = 70f;
+        var ground = SaveMesh("눈 땅", GroundMesh(c, Rect.MinMaxRect(gr.xMin - pad, gr.yMin - pad, gr.xMax + pad, gr.yMax + pad)));
+        Obj(groundG, "땅", ground, M.ground);
         var floor = FindOldFloor(c.ws);
         if (floor && floor.gameObject.activeSelf) { Undo.RecordObject(floor.gameObject, "바닥 끄기"); floor.gameObject.SetActive(false); }
 
         // 눈 더미
-        var sphere = BuiltinMesh(PrimitiveType.Sphere);
-        var moundG = Group(c.gen, "눈 더미");
-        int nm = Count(c, 0.6f, c.s.moundAmount);
+        var mounds = new Mesh[5];
+        for (int i = 0; i < mounds.Length; i++) mounds[i] = SaveMesh("눈 더미 " + (i + 1), SalcheonShapes.Mound(100 + i));
+        var moundG = Group(c, c.gen, "눈 더미");
+        int nm = Count(c, 1.6f, c.s.moundAmount);
         for (int i = 0; i < nm; i++)
         {
-            if (!TryPoint(c, 4f, out var p)) continue;
-            float r = c.R(3f, 9f);
-            var t = Obj(moundG, "눈 더미", sphere, snowMat).transform;
-            t.position = p + Vector3.down * r * 0.04f;
-            t.localScale = new Vector3(r, r * c.R(0.12f, 0.22f), r * c.R(0.6f, 0.95f));
+            float r = c.R(2f, 6f);
+            Vector3 p;
+            if (!TryPoint(c, 1f, r * 0.8f, out p)) continue;
+            var t = Obj(moundG, "눈 더미", mounds[c.RI(0, mounds.Length)], M.snow).transform;
+            t.position = p;
+            t.localScale = new Vector3(r, r * c.R(0.25f, 0.45f), r);
             t.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
         }
 
-        // 얼음 결정 무리 (밑동 기준으로 자라남)
-        var crystal = SaveMesh("얼음 결정", CrystalMesh(), false);
-        var crysG = Group(c.gen, "얼음 결정 무리");
-        int nc = Count(c, 1.2f, c.s.crystalAmount);
+        // 바깥 둘레 눈 덮인 산 (배경)
+        var hillG = Group(c, c.bg, "눈 덮인 산");
+        if (c.s.hillCount <= 0) return;
+        var hills = new Mesh[3];
+        for (int v = 0; v < 3; v++) hills[v] = SaveMesh("산 " + (v + 1), SalcheonShapes.Hill(1000 + v * 77 + c.s.seed));
+        Rect ring = Rect.MinMaxRect(c.area.xMin - c.s.hillDistance, c.area.yMin - c.s.hillDistance, c.area.xMax + c.s.hillDistance, c.area.yMax + c.s.hillDistance);
+        float per = 2f * (ring.width + ring.height);
+        for (int i = 0; i < c.s.hillCount; i++)
+        {
+            float u = Mathf.Repeat((i + c.R(-0.3f, 0.3f)) / c.s.hillCount * per, per);
+            Vector2 q, outward;
+            if (u < ring.width) { q = new Vector2(ring.xMin + u, ring.yMin); outward = new Vector2(0, -1); }
+            else if (u < ring.width + ring.height) { q = new Vector2(ring.xMax, ring.yMin + u - ring.width); outward = new Vector2(1, 0); }
+            else if (u < 2f * ring.width + ring.height) { q = new Vector2(ring.xMax - (u - ring.width - ring.height), ring.yMax); outward = new Vector2(0, 1); }
+            else { q = new Vector2(ring.xMin, ring.yMax - (u - 2f * ring.width - ring.height)); outward = new Vector2(-1, 0); }
+            q += outward * c.R(0f, 25f);
+            float h = c.R(c.s.hillHeight.x, c.s.hillHeight.y), rad = h * c.R(1.4f, 2.2f);
+            var hill = Obj(hillG, "산", hills[c.RI(0, 3)], M.snow, M.rock).transform;
+            hill.position = new Vector3(q.x, c.baseY - 0.5f, q.y);
+            hill.localScale = new Vector3(rad, h, rad * c.R(0.7f, 1.1f));
+            hill.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+        }
+    }
+
+    // ───────────────────────────── ② 눈 숲
+    static void BuildForest(Ctx c)
+    {
+        var M = GetMats(c);
+        var firs = new Mesh[6];
+        for (int i = 0; i < firs.Length; i++) firs[i] = SaveMesh("전나무 " + (i + 1), SalcheonShapes.Fir(200 + i));
+        var bushes = new Mesh[4];
+        for (int i = 0; i < bushes.Length; i++) bushes[i] = SaveMesh("눈 덤불 " + (i + 1), SalcheonShapes.Bush(300 + i));
+        var bare = new Mesh[3];
+        for (int i = 0; i < bare.Length; i++) bare[i] = SaveMesh("앙상한 나무 " + (i + 1), SalcheonShapes.BareTree(400 + i));
+        var rocks = new Mesh[4];
+        for (int i = 0; i < rocks.Length; i++) rocks[i] = SaveMesh("바위 " + (i + 1), SalcheonShapes.Rock(500 + i));
+        var crystal = SaveMesh("얼음 결정", SalcheonShapes.Crystal());
+
+        // 전나무 숲: 숲 덩어리 여러 개 + 띄엄띄엄
+        var firG = Group(c, c.gen, "눈 쌓인 전나무");
+        int nTrees = Count(c, 5.5f, c.s.forestAmount);
+        int groves = Mathf.Max(1, nTrees / 12);
+        int placed = 0;
+        for (int g = 0; g < groves && placed < nTrees; g++)
+        {
+            Vector3 gc;
+            if (!TryPoint(c, 4f, 0.5f, out gc)) continue;
+            c.taken.RemoveAt(c.taken.Count - 1);
+            int k = c.RI(7, 17);
+            for (int i = 0; i < k && placed < nTrees; i++)
+            {
+                float h = c.R(c.s.treeHeight.x, c.s.treeHeight.y);
+                Vector3 p;
+                if (!TryNear(c, Flat(gc), c.R(6f, 16f), 1f, h * 0.17f, out p)) continue;
+                PlaceTree(firG, firs[c.RI(0, firs.Length)], p, h, c, M);
+                placed++;
+            }
+        }
+        for (; placed < nTrees; placed++)
+        {
+            float h = c.R(c.s.treeHeight.x, c.s.treeHeight.y);
+            Vector3 p;
+            if (!TryPoint(c, 1.5f, h * 0.17f, out p)) continue;
+            PlaceTree(firG, firs[c.RI(0, firs.Length)], p, h, c, M);
+        }
+
+        // 눈 덤불 (숲 가장자리·길가에 많이)
+        var bushG = Group(c, c.gen, "눈 덤불");
+        int nb = Count(c, c.s.scary ? 2.5f : 4f, c.s.bushAmount);
+        for (int i = 0; i < nb; i++)
+        {
+            float s = c.R(0.8f, 2.2f);
+            Vector3 p;
+            if (!TryPoint(c, c.Chance(0.4f) ? -c.s.clearance * 0.5f : 0.5f, s * 0.6f, out p)) continue;
+            var t = Obj(bushG, "눈 덤불", bushes[c.RI(0, bushes.Length)], M.needle, M.snow).transform;
+            t.position = p + Vector3.down * 0.1f;
+            t.localScale = new Vector3(s, s * c.R(0.8f, 1.2f), s);
+            t.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+        }
+
+        // 가지에 눈 얹힌 앙상한 나무
+        var bareG = Group(c, c.gen, "앙상한 나무");
+        int nbt = Count(c, c.s.scary ? 2.6f : 0.9f, c.s.bareTreeAmount);
+        for (int i = 0; i < nbt; i++)
+        {
+            float h = c.R(4f, 10f);
+            Vector3 p;
+            if (!TryPoint(c, 1f, 1.2f, out p)) continue;
+            var t = Obj(bareG, "앙상한 나무", bare[c.RI(0, bare.Length)], M.bark, M.snow).transform;
+            t.position = p + Vector3.down * 0.2f;
+            t.localScale = Vector3.one * h;
+            t.rotation = Quaternion.Euler(c.R(-4f, 4f), c.R(0, 360), c.R(-4f, 4f));
+        }
+
+        // 눈 덮인 바위
+        var rockG = Group(c, c.gen, "눈 덮인 바위");
+        int nr = Count(c, 1.4f, c.s.rockAmount);
+        for (int i = 0; i < nr; i++)
+        {
+            float s = c.R(0.6f, 3f);
+            Vector3 p;
+            if (!TryPoint(c, 0.5f, s * 0.9f, out p)) continue;
+            var t = Obj(rockG, "바위", rocks[c.RI(0, rocks.Length)], M.rock, M.snow).transform;
+            t.position = p;
+            t.localScale = Vector3.one * s;
+            t.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+        }
+
+        // 얼음 결정 무리 (글자 도착 후 자라남)
+        var crysG = Group(c, c.gen, "얼음 결정 무리");
+        int nc = Count(c, 0.7f, c.s.crystalAmount);
         for (int i = 0; i < nc; i++)
         {
-            if (!TryPoint(c, 1.5f, out var p)) continue;
+            float size = c.R(0.6f, 1.6f);
+            Vector3 p;
+            if (!TryPoint(c, 0.5f, size * 1.2f, out p)) continue;
             var cluster = new GameObject("결정 무리").transform;
             cluster.SetParent(crysG, false);
             cluster.position = p;
             cluster.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
-            float size = c.R(0.6f, 1.6f);
             int k = c.RI(3, 8);
             for (int j = 0; j < k; j++)
             {
-                var t = Obj(cluster, "결정", crystal, iceMat).transform;
+                var t = Obj(cluster, "결정", crystal, M.ice).transform;
                 float a = c.R(0, 360) * Mathf.Deg2Rad, d = c.R(0f, 1.1f) * size;
                 t.localPosition = new Vector3(Mathf.Cos(a) * d, -0.15f, Mathf.Sin(a) * d);
                 float h = c.R(0.6f, 2.8f) * size, w = c.R(0.22f, 0.55f) * size;
@@ -368,225 +610,629 @@ public static class SalcheonBuilder
                 t.localRotation = Quaternion.Euler(c.R(-28f, 28f), c.R(0, 360), c.R(-28f, 28f));
             }
         }
-
-        // 둘레 설산 언덕 (배경, 이동 범위 밖)
-        var hillG = Group(c.bg, "설산 언덕");
-        var hills = new Mesh[3];
-        for (int v = 0; v < 3; v++) hills[v] = SaveMesh("언덕" + (v + 1), HillMesh(1000 + v * 77 + c.s.seed), false);
-        // 공간 가장자리(사각형)를 한 바퀴 돌며 바깥쪽에 배치
-        Rect ring = Rect.MinMaxRect(c.area.xMin - c.s.hillDistance, c.area.yMin - c.s.hillDistance, c.area.xMax + c.s.hillDistance, c.area.yMax + c.s.hillDistance);
-        float per = 2f * (ring.width + ring.height);
-        for (int i = 0; i < c.s.hillCount; i++)
-        {
-            float u = (i + c.R(-0.35f, 0.35f)) / Mathf.Max(1, c.s.hillCount) * per;
-            u = Mathf.Repeat(u, per);
-            Vector2 q, outward;
-            if (u < ring.width) { q = new Vector2(ring.xMin + u, ring.yMin); outward = new Vector2(0, -1); }
-            else if (u < ring.width + ring.height) { q = new Vector2(ring.xMax, ring.yMin + u - ring.width); outward = new Vector2(1, 0); }
-            else if (u < 2f * ring.width + ring.height) { q = new Vector2(ring.xMax - (u - ring.width - ring.height), ring.yMax); outward = new Vector2(0, 1); }
-            else { q = new Vector2(ring.xMin, ring.yMax - (u - 2f * ring.width - ring.height)); outward = new Vector2(-1, 0); }
-            q += outward * c.R(0f, 30f);
-            Vector3 pos = new Vector3(q.x, c.baseY, q.y);
-            float h = c.R(c.s.hillHeight.x, c.s.hillHeight.y), rad = h * c.R(1.1f, 1.8f);
-            var mesh = hills[c.RI(0, 3)];
-            var hill = Obj(hillG, "언덕", mesh, rockMat).transform;
-            hill.position = pos + Vector3.down * 0.5f;
-            hill.localScale = new Vector3(rad, h, rad * c.R(0.7f, 1.1f));
-            hill.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
-            var cap = Obj(hill, "눈 덮개", mesh, capMat).transform;
-            cap.localPosition = new Vector3(0, 0.56f, 0);
-            cap.localScale = new Vector3(0.5f, 0.46f, 0.5f);
-            cap.localRotation = Quaternion.identity;
-        }
     }
 
-    // ───────────────────────────── ② 주변 소품
+    static void PlaceTree(Transform parent, Mesh mesh, Vector3 p, float h, Ctx c, Mats M)
+    {
+        var t = Obj(parent, "전나무", mesh, M.bark, M.needle, M.snow).transform;
+        t.position = p + Vector3.down * 0.15f;
+        float w = h * c.R(0.85f, 1.15f);
+        t.localScale = new Vector3(w, h, w);
+        t.rotation = Quaternion.Euler(c.R(-2f, 2f), c.R(0, 360), c.R(-2f, 2f));
+    }
+
+    // ───────────────────────────── ③ 눈 소품
+    class PropKit
+    {
+        public Mesh[] snowmen = new Mesh[5];
+        public Mesh duck, igloo, bench, lamp, sled, shovel, head, crow, fallenLamp, print;
+        public bool scary;
+        public Mesh[] jangdok = new Mesh[2], balls = new Mesh[2];
+    }
+
     static void BuildProps(Ctx c)
     {
-        var barkMat = Mat("앙상한 나무", new Color32(43, 49, 56, 255), 0f, 0.25f);
-        var rockMat = Mat("서리 바위", new Color32(94, 107, 120, 255), 0f, 0.25f);
-        var iceMat = OwnOrNew("얼음", new Color32(168, 216, 240, 204), 0.1f, 0.9f);
-        var cyl = BuiltinMesh(PrimitiveType.Cylinder);
-        var cube = BuiltinMesh(PrimitiveType.Cube);
-        var sphere = BuiltinMesh(PrimitiveType.Sphere);
-        var crystal = SaveMesh("얼음 결정", CrystalMesh(), false);
+        var M = GetMats(c);
+        var K = new PropKit();
+        K.scary = c.s.scary;
+        for (int i = 0; i < 5; i++) K.snowmen[i] = SaveMesh("눈사람 " + (i + 1) + (K.scary ? " (으스스)" : ""), SalcheonShapes.Snowman(i, 600 + i, K.scary));
+        K.head = SaveMesh("떨어진 머리", SalcheonShapes.FallenHead(650));
+        K.crow = SaveMesh("까마귀", SalcheonShapes.Crow(660));
+        K.fallenLamp = SaveMesh("쓰러진 가로등", SalcheonShapes.FallenLamp());
+        K.print = SaveMesh("발자국", SalcheonShapes.Footprint());
+        K.duck = SaveMesh("눈오리", SalcheonShapes.Duck(700));
+        K.igloo = SaveMesh("이글루", SalcheonShapes.Igloo());
+        K.bench = SaveMesh("벤치", SalcheonShapes.Bench());
+        K.lamp = SaveMesh("가로등", SalcheonShapes.LampPost());
+        K.sled = SaveMesh("썰매", SalcheonShapes.Sled());
+        K.shovel = SaveMesh("삽 꽂힌 눈더미", SalcheonShapes.ShovelMound());
+        for (int i = 0; i < 2; i++) K.jangdok[i] = SaveMesh("장독대 " + (i + 1), SalcheonShapes.Jangdok(800 + i));
+        for (int i = 0; i < 2; i++) K.balls[i] = SaveMesh("눈덩이 더미 " + (i + 1), SalcheonShapes.Snowballs(900 + i));
 
-        // 얼어붙은 나무
-        var treeG = Group(c.gen, "얼어붙은 나무");
-        int nt = Count(c, 0.35f, c.s.treeAmount);
-        for (int i = 0; i < nt; i++)
+        var root = Group(c, c.gen, "눈 소품");
+        var lights = new List<Light>();
+
+        // 큰 눈사람: 시작 지점에서 앞쪽에 보이게
+        if (c.s.giantSnowman)
         {
-            if (!TryPoint(c, 3f, out var p)) continue;
-            var tree = new GameObject("얼어붙은 나무").transform;
-            tree.SetParent(treeG, false);
-            tree.position = p;
-            tree.rotation = Quaternion.Euler(c.R(-6f, 6f), c.R(0, 360), c.R(-6f, 6f));
-            float h = c.R(4f, 9f), w = c.R(0.18f, 0.35f);
-            var trunk = Obj(tree, "줄기", cyl, barkMat).transform;
-            trunk.localPosition = new Vector3(0, h * 0.5f, 0);
-            trunk.localScale = new Vector3(w, h * 0.5f, w);
-            int nb = c.RI(4, 8);
-            for (int b = 0; b < nb; b++)
+            Vector3 right = Vector3.Cross(Vector3.up, c.startForward);
+            Vector3 p = Vector3.zero; bool ok = false;
+            for (int i = 0; i < 30 && !ok; i++)
             {
-                float y = h * c.R(0.4f, 0.92f), bl = h * c.R(0.18f, 0.38f) * (1.1f - y / h);
-                var dir = Quaternion.Euler(c.R(-60f, -30f), c.R(0, 360), 0) * Vector3.forward;
-                dir = Quaternion.AngleAxis(-90f, Vector3.Cross(dir, Vector3.up).normalized) * dir; // 위쪽으로 비스듬히
-                var br = Obj(tree, "가지", cyl, barkMat).transform;
-                Vector3 basePos = new Vector3(0, y, 0);
-                br.localPosition = basePos + dir.normalized * bl * 0.5f;
-                br.localRotation = Quaternion.FromToRotation(Vector3.up, dir.normalized);
-                br.localScale = new Vector3(w * 0.4f, bl * 0.5f, w * 0.4f);
+                Vector3 guess = c.start + c.startForward * c.R(22f, 40f) + right * c.R(-1f, 1f) * c.R(8f, 20f);
+                if (Free(c, guess.x, guess.z, 0f, 3.5f)) { p = new Vector3(guess.x, H(c, guess.x, guess.z), guess.z); ok = true; }
+            }
+            if (ok)
+            {
+                c.taken.Add(new Spot(Flat(p), 3.5f));
+                var g = K.scary ? Snowman(root, K, M, p, 4, 3.6f, c) : Snowman(root, K, M, p, 0, 4.2f, c);
+                g.name = "큰 눈사람";
+                g.transform.rotation = Quaternion.LookRotation(Flat3(c.start - p), Vector3.up);
+                MoundAt(root, p, 4.5f, c, M);
             }
         }
 
-        // 서리 바위
-        var rockG = Group(c.gen, "서리 바위");
-        int nr = Count(c, 0.8f, c.s.rockAmount);
-        for (int i = 0; i < nr; i++)
+        // 길가 장면들 (번갈아 양옆)
+        int sceneIdx = 0;
+        foreach (var spot in PathSpots(c, c.s.sceneSpacing, c.s.clearance + 2.5f, 3.5f, 0))
         {
-            if (!TryPoint(c, 1f, out var p)) continue;
-            float s = c.R(0.6f, 2.6f);
-            var t = Obj(rockG, "바위", sphere, rockMat).transform;
-            float ry = s * c.R(0.35f, 0.7f);
-            t.position = p + Vector3.down * ry * 0.3f;
-            t.localScale = new Vector3(s * c.R(0.8f, 1.3f), ry, s * c.R(0.8f, 1.3f));
-            t.rotation = Quaternion.Euler(c.R(-15f, 15f), c.R(0, 360), c.R(-15f, 15f));
+            var sceneRoot = new GameObject("장면").transform;
+            sceneRoot.SetParent(root, false);
+            sceneRoot.position = spot;
+            sceneRoot.rotation = FacePath(c, spot, 15f);
+            int type = sceneIdx++ % 8;
+            if (K.scary) BuildScaryScene(sceneRoot, type, K, M, c, lights); else BuildScene(sceneRoot, type, K, M, c, lights);
         }
 
-        // 반쯤 묻힌 울타리
-        var fenceG = Group(c.gen, "묻힌 울타리");
-        int nf = Mathf.Max(c.s.fenceAmount > 0 ? 1 : 0, Count(c, 0.08f, c.s.fenceAmount));
-        for (int i = 0; i < nf; i++)
+        // 길가 가로등
+        if (c.s.lampSpacing > 0.5f)
         {
-            if (!TryPoint(c, 6f, out var p)) continue;
-            var line = new GameObject("울타리").transform;
-            line.SetParent(fenceG, false);
-            line.position = p;
-            line.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
-            int posts = c.RI(5, 10);
-            Vector3 prev = Vector3.zero; bool hasPrev = false;
-            for (int k = 0; k < posts; k++)
+            int li = 0;
+            foreach (var spot in PathSpots(c, c.s.lampSpacing, c.s.clearance * 0.6f, 0.4f, 1))
             {
-                float lx = k * c.R(1.6f, 2.1f);
-                Vector3 wp = line.TransformPoint(new Vector3(lx, 0, 0));
-                float gy = H(c, wp.x, wp.z) - line.position.y;
-                float ph = c.R(1.1f, 1.7f), sink = c.R(0.2f, 0.7f);
-                var post = Obj(line, "말뚝", cube, barkMat).transform;
-                post.localPosition = new Vector3(lx, gy + ph * 0.5f - sink, 0);
-                post.localScale = new Vector3(0.16f, ph, 0.16f);
-                post.localRotation = Quaternion.Euler(c.R(-12f, 12f), 0, c.R(-12f, 12f));
-                Vector3 top = post.localPosition + Vector3.up * (ph * 0.5f - 0.25f);
-                if (hasPrev && c.R(0, 1) > 0.3f)
+                bool lit = K.scary ? li % 4 == 0 : li % 3 == 0;
+                li++;
+                if (K.scary && c.Chance(0.15f))
                 {
-                    var rail = Obj(line, "가로대", cube, barkMat).transform;
-                    Vector3 mid = (prev + top) * 0.5f, d = top - prev;
-                    rail.localPosition = mid;
-                    rail.localRotation = Quaternion.FromToRotation(Vector3.right, d.normalized);
-                    rail.localScale = new Vector3(d.magnitude, 0.09f, 0.07f);
+                    var f = Obj(root, "쓰러진 가로등", K.fallenLamp, M.metal, M.deadBulb, M.snow).transform;
+                    f.position = spot + Vector3.down * 0.1f;
+                    f.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+                    continue;
                 }
-                prev = top; hasPrev = true;
+                var t = Obj(root, "가로등", K.lamp, M.metal, (K.scary && !lit) ? M.deadBulb : M.lampBulb, M.snow).transform;
+                t.position = spot + Vector3.down * 0.1f;
+                float lean = K.scary ? 9f : 2f;
+                t.rotation = Quaternion.Euler(c.R(-lean, lean), c.R(0, 360), c.R(-lean, lean));
+                if (lit && lights.Count < 10)
+                    lights.Add(PointLight(t, new Vector3(0, 3.75f, 0), 9f, K.scary ? 1.1f : 1.6f, new Color32(191, 228, 255, 255)));
             }
         }
 
-        // 얼음 기둥 (밑동 기준으로 자라남)
-        var pillarG = Group(c.gen, "얼음 기둥");
-        int np = Count(c, 0.15f, c.s.pillarAmount);
-        for (int i = 0; i < np; i++)
+        // 들판 곳곳: 혼자 선 눈사람, 눈오리 떼, 눈덩이
+        int ns = Count(c, 0.35f, c.s.scatterAmount);
+        for (int i = 0; i < ns; i++)
         {
-            if (!TryPoint(c, 3f, out var p)) continue;
-            var t = Obj(pillarG, "얼음 기둥", crystal, iceMat).transform;
-            t.position = p + Vector3.down * 0.3f;
-            float h = c.R(5f, 12f), w = c.R(1.2f, 2.6f);
-            t.localScale = new Vector3(w, h, w);
-            t.rotation = Quaternion.Euler(c.R(-12f, 12f), c.R(0, 360), c.R(-12f, 12f));
+            Vector3 p;
+            if (!TryPoint(c, 2f, 1f, out p)) continue;
+            var g = Snowman(root, K, M, p, K.scary ? c.RI(0, 5) : c.RI(0, 4), c.R(0.8f, 1.3f), c);
+            g.transform.rotation = FacePath(c, p, 40f) * Quaternion.Euler(c.R(-6f, 6f), 0, c.R(-8f, 8f));
+        }
+        int nd = K.scary ? 0 : Count(c, 0.18f, c.s.scatterAmount);
+        for (int i = 0; i < nd; i++)
+        {
+            Vector3 p;
+            if (!TryPoint(c, 1f, 2f, out p)) continue;
+            DuckFlock(root, K, M, p, c.RI(5, 12), c);
+        }
+
+        // 눈 쌓인 울타리
+        for (int i = 0; i < c.s.fences; i++)
+        {
+            Vector3 p;
+            if (!TryPoint(c, 3f, 5f, out p)) continue;
+            Fence(root, p, c, M, i);
+        }
+
+        if (K.scary)
+        {
+            // 끊긴 발자국: 길에서 숲 쪽으로 걸어가다 뚝 끊김
+            for (int i = 0; i < c.s.footprintTrails; i++) FootTrail(root, K, M, c, i);
+            // 까마귀
+            Crows(c, K, M, root);
+            // 안 볼 때 돌아보는 눈사람들
+            if (c.s.watchingSnowmen)
+            {
+                var wch = Undo.AddComponent<SalcheonWatchers>(root.gameObject);
+                foreach (var tr in root.GetComponentsInChildren<Transform>())
+                    if (tr.name == "눈사람" || tr.name == "큰 눈사람") wch.watchers.Add(tr);
+            }
+        }
+
+        // 가로등 깜빡임에 넣기
+        var amb = c.gen.GetComponent<SalcheonAmbience>();
+        if (amb == null) amb = Undo.AddComponent<SalcheonAmbience>(c.gen.gameObject);
+        Undo.RecordObject(amb, "분위기");
+        var all = new List<Light>();
+        if (amb.flickerLights != null) foreach (var l in amb.flickerLights) if (l && !l.transform.IsChildOf(root)) all.Add(l);
+        all.AddRange(lights);
+        amb.flickerLights = all.ToArray();
+    }
+
+    // 길을 따라 일정 간격으로, 양옆 번갈아 빈자리 찾기
+    static List<Vector3> PathSpots(Ctx c, float spacing, float side, float radius, int phase)
+    {
+        var res = new List<Vector3>();
+        float acc = spacing * 0.5f + phase * spacing * 0.5f;
+        int flip = phase;
+        for (int i = 0; i + 1 < c.path.Count; i++)
+        {
+            Vector2 a = Flat(c.path[i]), b = Flat(c.path[i + 1]);
+            float len = Vector2.Distance(a, b);
+            if (len < 1e-3f) continue;
+            Vector2 dir = (b - a) / len, nrm = new Vector2(-dir.y, dir.x);
+            for (; acc < len; acc += spacing)
+            {
+                Vector2 q = a + dir * acc;
+                float sgn = (flip++ % 2 == 0) ? 1f : -1f;
+                for (int tries = 0; tries < 8; tries++)
+                {
+                    float off = side + radius + tries * 3f;
+                    Vector2 cand = q + nrm * sgn * off + dir * c.R(-2f, 2f);
+                    if (!Free(c, cand.x, cand.y, -c.s.clearance + 0.01f, radius)) { if (tries == 3) sgn = -sgn; continue; }
+                    if (DistToPath(c, cand.x, cand.y) < side) continue;
+                    c.taken.Add(new Spot(cand, radius));
+                    res.Add(new Vector3(cand.x, H(c, cand.x, cand.y), cand.y));
+                    break;
+                }
+            }
+            acc -= len;
+        }
+        return res;
+    }
+
+    // 길가 장면 8가지 (장면 오브젝트의 +Z가 길 쪽)
+    static void BuildScene(Transform s, int type, PropKit K, Mats M, Ctx c, List<Light> lights)
+    {
+        switch (type)
+        {
+            case 0: // 눈사람 가족
+                SnowmanLocal(s, K, M, new Vector3(-0.9f, 0, 0), 1, 1.15f, c);
+                SnowmanLocal(s, K, M, new Vector3(0.6f, 0, 0.3f), 0, 1.0f, c);
+                SnowmanLocal(s, K, M, new Vector3(1.7f, 0, 0.6f), 3, 0.6f, c);
+                Local(s, K.balls[0], new Vector3(-2.2f, 0, 0.8f), 0, 1f, M.snow);
+                break;
+            case 1: // 벤치 + 눈오리들
+                Local(s, K.bench, Vector3.zero, 0, 1f, M.wood, M.metal, M.snow);
+                for (int i = 0; i < 5; i++)
+                    Local(s, K.duck, new Vector3(-0.7f + i * 0.35f, 0.56f, -0.05f), c.R(-25f, 25f), 1.1f, M.snow, M.coal, M.carrot);
+                for (int i = 0; i < 4; i++)
+                    Local(s, K.duck, new Vector3(-0.5f + i * 0.4f, 0.02f, 0.6f), c.R(-30f, 30f), 1.2f, M.snow, M.coal, M.carrot);
+                break;
+            case 2: // 장독대
+                Local(s, K.jangdok[c.RI(0, 2)], Vector3.zero, c.R(-8f, 8f), 1f, M.onggi, M.snow, M.stone);
+                Local(s, K.shovel, new Vector3(2.8f, 0, 0.3f), c.R(0, 360), 0.9f, M.snow, M.wood, M.metal);
+                break;
+            case 3: // 이글루 (안에 불빛)
+                Local(s, K.igloo, new Vector3(0, -0.05f, -2.5f), 0, 1f, M.snow, M.warm);
+                if (lights.Count < 10) lights.Add(PointLight(s, new Vector3(0, 0.6f, 2.2f), 7f, 1.4f, new Color32(255, 176, 96, 255)));
+                SnowmanLocal(s, K, M, new Vector3(2.6f, 0, 1.6f), 2, 0.8f, c);
+                break;
+            case 4: // 썰매 + 눈덩이 + 꼬마 눈사람
+                Local(s, K.sled, new Vector3(-0.8f, 0.02f, 0.4f), c.R(20f, 60f), 1f, M.redWood, M.metal, M.snow);
+                Local(s, K.balls[1], new Vector3(1.2f, 0, -0.2f), 0, 1f, M.snow);
+                SnowmanLocal(s, K, M, new Vector3(0.2f, 0, -1.2f), 3, 0.7f, c);
+                break;
+            case 5: // 눈오리 행렬
+                for (int i = 0; i < 12; i++)
+                    Local(s, K.duck, new Vector3(-2.4f + i * 0.42f, 0.02f, Mathf.Sin(i * 0.7f) * 0.25f), 90f + c.R(-10f, 10f), 1.3f, M.snow, M.coal, M.carrot);
+                break;
+            case 6: // 삽 꽂힌 눈더미 + 눈사람 만들다 만 것
+                Local(s, K.shovel, Vector3.zero, c.R(0, 360), 1.2f, M.snow, M.wood, M.metal);
+                Local(s, K.balls[0], new Vector3(1.8f, 0, 0.5f), 0, 1.2f, M.snow);
+                SnowmanLocal(s, K, M, new Vector3(-1.8f, 0, 0.4f), 1, 1.0f, c);
+                break;
+            default: // 눈사람 둘이 마주 보기 + 벤치
+                var a = SnowmanLocal(s, K, M, new Vector3(-0.9f, 0, 0), 0, 1.1f, c);
+                var b = SnowmanLocal(s, K, M, new Vector3(0.9f, 0, 0), 2, 1.0f, c);
+                a.transform.localRotation = Quaternion.Euler(0, 70f, 0);
+                b.transform.localRotation = Quaternion.Euler(0, -70f, 0);
+                Local(s, K.bench, new Vector3(0, 0, -1.6f), 0, 1f, M.wood, M.metal, M.snow);
+                break;
         }
     }
 
-    // ───────────────────────────── ③ 고드름
-    static void BuildIcicles(Ctx c)
+    // 으스스한 길가 장면 8가지 (+Z가 길 쪽)
+    static void BuildScaryScene(Transform s, int type, PropKit K, Mats M, Ctx c, List<Light> lights)
     {
-        var icicleMat = OwnOrNew("고드름", new Color32(216, 240, 255, 217), 0.1f, 0.95f);
-        var mesh = SaveMesh("고드름", IcicleMesh(), false);
-        var g = Group(c.gen, "고드름");
-        float th = c.ws.strokeThickness, dp = c.ws.strokeDepth;
-        int total = 0;
+        switch (type)
+        {
+            case 0: // 길 쪽을 보는 셋 — 하나만 등을 돌림
+                SnowmanLocal(s, K, M, new Vector3(-1.2f, 0, 0), 1, 1.15f, c);
+                SnowmanLocal(s, K, M, new Vector3(0.3f, 0, 0.4f), 0, 1.0f, c);
+                SnowmanLocal(s, K, M, new Vector3(1.6f, 0, -0.2f), 2, 0.95f, c).transform.localRotation = Quaternion.Euler(0, 180f + c.R(-10f, 10f), 0);
+                break;
+            case 1: // 빈 벤치 위에 머리 하나
+                Local(s, K.bench, Vector3.zero, 0, 1f, M.wood, M.metal, M.snow);
+                Local(s, K.head, new Vector3(c.R(-0.5f, 0.5f), 0.5f, -0.05f), c.R(-20f, 20f), 0.9f, M.snow, M.coal, M.carrot, M.bark);
+                break;
+            case 2: // 장독대 + 까마귀 자리
+                Local(s, K.jangdok[c.RI(0, 2)], Vector3.zero, c.R(-8f, 8f), 1f, M.onggi, M.snow, M.stone);
+                break;
+            case 3: // 불 꺼진 이글루 + 안으로 들어간 발자국
+                Local(s, K.igloo, new Vector3(0, -0.05f, -2.5f), 0, 1f, M.snow, M.coal);
+                for (int i = 0; i < 9; i++)
+                {
+                    float z = 6f - i * 0.7f;
+                    Local(s, K.print, new Vector3((i % 2 == 0 ? -0.13f : 0.13f) + Mathf.Sin(i * 0.5f) * 0.2f, 0.02f, z), 180f + c.R(-8f, 8f), 1.1f, M.print);
+                }
+                break;
+            case 4: // 뒤집힌 썰매 + 떨어진 머리
+                var sled = Local(s, K.sled, new Vector3(-0.8f, 0.3f, 0.4f), c.R(20f, 60f), 1f, M.redWood, M.metal, M.snow);
+                sled.transform.localRotation *= Quaternion.Euler(0, 0, 165f);
+                Local(s, K.head, new Vector3(1.0f, 0, 0.6f), c.R(-30f, 30f), 1f, M.snow, M.coal, M.carrot, M.bark);
+                break;
+            case 5: // 안쪽을 보고 둘러선 눈사람들 (가운데는 비어 있음)
+                int n = 5;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = i * Mathf.PI * 2f / n;
+                    var g = SnowmanLocal(s, K, M, new Vector3(Mathf.Cos(a) * 2.6f, 0, Mathf.Sin(a) * 2.6f), c.RI(0, 3), c.R(0.8f, 1.05f), c);
+                    g.transform.localRotation = Quaternion.LookRotation(new Vector3(-Mathf.Cos(a), 0, -Mathf.Sin(a)), Vector3.up);
+                }
+                break;
+            case 6: // 쓰러진 가로등 + 삽 꽂힌 눈더미
+                Local(s, K.fallenLamp, Vector3.zero, c.R(0, 360), 1f, M.metal, M.deadBulb, M.snow);
+                Local(s, K.shovel, new Vector3(2.4f, 0, 0.8f), c.R(0, 360), 1.1f, M.snow, M.wood, M.metal);
+                break;
+            default: // 길쭉한 눈사람 혼자, 팔을 길 쪽으로 뻗음
+                SnowmanLocal(s, K, M, Vector3.zero, 4, c.R(1.1f, 1.35f), c).transform.localRotation = Quaternion.Euler(c.R(-4f, 4f), c.R(-10f, 10f), c.R(-6f, 6f));
+                break;
+        }
+    }
 
+    // 끊긴 발자국 한 줄 (메시 하나로)
+    static void FootTrail(Transform parent, PropKit K, Mats M, Ctx c, int index)
+    {
+        Vector3 p0;
+        if (!TryPoint(c, -c.s.clearance * 0.6f, 0.5f, out p0)) return;
+        c.taken.RemoveAt(c.taken.Count - 1);
+        Vector2 q = ClosestOnPath(c, Flat(p0));
+        Vector3 dir = Flat3(p0 - new Vector3(q.x, 0, q.y));
+        dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.forward; // 길에서 멀어지는 쪽
+        var root = new GameObject("끊긴 발자국").transform;
+        root.SetParent(parent, false);
+        root.position = p0;
+        var k = new SalcheonKit(1, index);
+        Vector3 cur = p0;
+        int steps = c.RI(18, 34);
+        for (int i = 0; i < steps; i++)
+        {
+            dir = Quaternion.Euler(0, c.R(-7f, 7f), 0) * dir;
+            cur += dir * 0.72f;
+            Vector3 side = Vector3.Cross(Vector3.up, dir) * (i % 2 == 0 ? 0.13f : -0.13f);
+            Vector3 w = cur + side;
+            Vector3 lp = w - p0; lp.y = H(c, w.x, w.z) - p0.y + 0.015f;
+            Quaternion rq = Quaternion.LookRotation(dir, Vector3.up);
+            k.Sphere(0, lp + rq * new Vector3(0, 0, 0.03f), new Vector3(0.065f, 0.012f, 0.11f), rq, 10, 0f, 0f);
+            k.Sphere(0, lp + rq * new Vector3(0, 0, -0.1f), new Vector3(0.05f, 0.01f, 0.055f), rq, 8, 0f, 0f);
+        }
+        var mesh = SaveMesh("발자국 줄 " + (index + 1), k.ToMesh("발자국 줄"));
+        Obj(root, "발자국", mesh, M.print);
+    }
+
+    // 까마귀: 앙상한 나무 꼭대기, 자모 윗면, 울타리 말뚝, 장독대, 땅
+    static void Crows(Ctx c, PropKit K, Mats M, Transform propsRoot)
+    {
+        var g = new GameObject("까마귀").transform;
+        g.SetParent(propsRoot, false);
+        int budget = Mathf.RoundToInt(40 * c.s.crowAmount);
+        if (budget <= 0) return;
+        var spots = new List<KeyValuePair<Vector3, float>>(); // (자리, 크기)
+
+        var bare = c.gen.Find("앙상한 나무");
+        if (bare) foreach (Transform t in bare) if (c.Chance(0.3f)) spots.Add(new KeyValuePair<Vector3, float>(t.position + t.up * t.localScale.y * 0.97f, 2.2f));
+
+        ForEachSegment(c, (p, A, B, thick, depth) =>
+        {
+            if (!c.Chance(0.12f)) return;
+            Vector3[] cand = { thick, -thick, depth, -depth };
+            int best = 0;
+            for (int i = 1; i < 4; i++) if (cand[i].normalized.y > cand[best].normalized.y) best = i;
+            if (cand[best].normalized.y < 0.7f) return;
+            Vector3 top = Vector3.Lerp(A, B, c.R(0.2f, 0.8f)) + cand[best];
+            if (top.y < c.baseY + 3f) return;
+            float extra = Mathf.Clamp((best < 2 ? depth : thick).magnitude * 0.44f, 0.12f, 1.2f); // 자모 위 눈 두께만큼
+            spots.Add(new KeyValuePair<Vector3, float>(top + Vector3.up * extra, 3.2f));
+        });
+
+        foreach (var tr in propsRoot.GetComponentsInChildren<Transform>())
+        {
+            if (tr.name.StartsWith("장독대") && c.Chance(0.8f))
+                for (int i = 0; i < 2; i++) spots.Add(new KeyValuePair<Vector3, float>(tr.TransformPoint(new Vector3(c.R(-1.5f, 1.5f), 1.45f, -0.55f)), 1.6f));
+            if (tr.name == "울타리" && c.Chance(0.6f))
+            {
+                var mr = tr.GetComponent<Renderer>();
+                if (mr) spots.Add(new KeyValuePair<Vector3, float>(new Vector3(mr.bounds.center.x, mr.bounds.max.y, mr.bounds.center.z), 1.8f));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) // 땅 위 무리
+        {
+            Vector3 p;
+            if (!TryPoint(c, 0f, 1.5f, out p)) continue;
+            int n = c.RI(3, 7);
+            for (int j = 0; j < n; j++) spots.Add(new KeyValuePair<Vector3, float>(p + new Vector3(c.R(-1.5f, 1.5f), 0, c.R(-1.5f, 1.5f)), 1.8f));
+        }
+
+        // 섞어서 budget만큼
+        for (int i = spots.Count - 1; i > 0; i--) { int j = c.RI(0, i + 1); var t = spots[i]; spots[i] = spots[j]; spots[j] = t; }
+        for (int i = 0; i < spots.Count && i < budget; i++)
+        {
+            var t = Obj(g, "까마귀", K.crow, M.crow, M.coal).transform;
+            t.position = spots[i].Key;
+            t.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+            t.localScale = Vector3.one * spots[i].Value * c.R(0.9f, 1.1f);
+        }
+        Undo.AddComponent<SalcheonCrows>(g.gameObject);
+    }
+
+    static GameObject Local(Transform parent, Mesh mesh, Vector3 lp, float yaw, float scale, params Material[] mats)
+    {
+        var go = Obj(parent, mesh.name, mesh, mats);
+        go.transform.localPosition = lp;
+        go.transform.localRotation = Quaternion.Euler(0, yaw, 0);
+        go.transform.localScale = Vector3.one * scale;
+        return go;
+    }
+
+    static Material[] SnowmanMats(PropKit K, Mats M, int style, Ctx c)
+    {
+        return new[] { M.snow, M.coal, M.carrot, M.bark, M.scarves[c.RI(0, M.scarves.Length)], M.hats[c.RI(0, M.hats.Length)] };
+    }
+
+    static GameObject SnowmanLocal(Transform parent, PropKit K, Mats M, Vector3 lp, int style, float scale, Ctx c)
+    {
+        var go = Local(parent, K.snowmen[style], lp, c.R(-20f, 20f), scale, SnowmanMats(K, M, style, c));
+        go.name = "눈사람";
+        return go;
+    }
+
+    static GameObject Snowman(Transform parent, PropKit K, Mats M, Vector3 p, int style, float scale, Ctx c)
+    {
+        var go = Obj(parent, "눈사람", K.snowmen[style], SnowmanMats(K, M, style, c));
+        go.transform.position = p + Vector3.down * 0.05f;
+        go.transform.localScale = Vector3.one * scale;
+        return go;
+    }
+
+    static void MoundAt(Transform parent, Vector3 p, float r, Ctx c, Mats M)
+    {
+        var t = Obj(parent, "눈 더미", SaveMesh("눈 더미 1", SalcheonShapes.Mound(100)), M.snow).transform;
+        t.position = p + Vector3.down * 0.1f;
+        t.localScale = new Vector3(r, r * 0.18f, r);
+    }
+
+    static void DuckFlock(Transform parent, PropKit K, Mats M, Vector3 p, int n, Ctx c)
+    {
+        var g = new GameObject("눈오리 떼").transform;
+        g.SetParent(parent, false);
+        g.position = p;
+        g.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 lp = new Vector3(c.R(-1.6f, 1.6f), 0, c.R(-1.2f, 1.2f));
+            Vector3 wp = g.TransformPoint(lp);
+            lp.y = H(c, wp.x, wp.z) - p.y;
+            Local(g, K.duck, lp, c.R(-40f, 40f), c.R(1.1f, 1.6f), M.snow, M.coal, M.carrot);
+        }
+    }
+
+    static void Fence(Transform parent, Vector3 p, Ctx c, Mats M, int index)
+    {
+        var line = new GameObject("눈 쌓인 울타리").transform;
+        line.SetParent(parent, false);
+        line.position = p;
+        line.rotation = Quaternion.Euler(0, c.R(0, 360), 0);
+        var k = new SalcheonKit(2, index);
+        int posts = c.RI(6, 11);
+        Vector3 prevTop = Vector3.zero; bool hasPrev = false;
+        for (int i = 0; i < posts; i++)
+        {
+            float lx = i * c.R(1.6f, 2.1f);
+            Vector3 wp = line.TransformPoint(new Vector3(lx, 0, 0));
+            float gy = H(c, wp.x, wp.z) - p.y;
+            float ph = c.R(1.0f, 1.5f), sink = c.R(0.1f, 0.5f);
+            Quaternion lean = Quaternion.Euler(c.R(-8f, 8f), 0, c.R(-8f, 8f));
+            Vector3 bottom = new Vector3(lx, gy - sink, 0), top = bottom + lean * Vector3.up * ph;
+            k.Box(0, (bottom + top) * 0.5f, new Vector3(0.14f, ph, 0.14f), lean);
+            k.Sphere(1, top + Vector3.up * 0.01f, new Vector3(0.12f, 0.08f, 0.12f), Quaternion.identity, 8, 0.25f, 0f);
+            Vector3 railTop = top - Vector3.up * 0.25f;
+            if (hasPrev)
+            {
+                Vector3 d = railTop - prevTop;
+                Quaternion rq = Quaternion.FromToRotation(Vector3.right, d.normalized);
+                Vector3 mid = (prevTop + railTop) * 0.5f;
+                k.Box(0, mid, new Vector3(d.magnitude, 0.08f, 0.06f), rq);
+                k.Sphere(1, mid + Vector3.up * 0.05f, new Vector3(d.magnitude * 0.5f, 0.05f, 0.06f), rq, 10, 0.3f, 0f);
+                Vector3 mid2 = mid - Vector3.up * 0.45f;
+                k.Box(0, mid2, new Vector3(d.magnitude, 0.08f, 0.06f), rq);
+            }
+            prevTop = railTop; hasPrev = true;
+        }
+        var mesh = SaveMesh("울타리 " + (index + 1), k.ToMesh("울타리"));
+        var go = Obj(line, "울타리", mesh, M.wood, M.snow);
+        go.transform.localPosition = Vector3.zero;
+    }
+
+    static Light PointLight(Transform parent, Vector3 lp, float range, float intensity, Color color)
+    {
+        var go = new GameObject("빛");
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = lp;
+        var l = go.AddComponent<Light>();
+        l.type = LightType.Point; l.range = range; l.intensity = intensity; l.color = color; l.shadows = LightShadows.None;
+        return l;
+    }
+
+    // ───────────────────────────── ④ 자모 위 눈·고드름·밑동 눈더미
+    // 자모 획 하나하나를 월드 좌표로 돌면서 콜백
+    delegate void SegFn(JamoPiece p, Vector3 A, Vector3 B, Vector3 thick, Vector3 depth);
+
+    static void ForEachSegment(Ctx c, SegFn fn)
+    {
+        float th = c.ws.strokeThickness, dp = c.ws.strokeDepth;
         foreach (var p in c.ws.Pieces)
         {
             if (!p || p.points == null) continue;
             var tr = p.transform;
             foreach (var stroke in p.Strokes)
-            {
                 for (int i = 0; i + 1 < stroke.Length; i++)
                 {
                     Vector2 a2 = stroke[i] - p.pivot, b2 = stroke[i + 1] - p.pivot;
                     Vector3 A = tr.TransformPoint(new Vector3(a2.x, a2.y, 0));
                     Vector3 B = tr.TransformPoint(new Vector3(b2.x, b2.y, 0));
-                    Vector3 d = B - A;
-                    float len = d.magnitude;
-                    if (len < 0.8f || Mathf.Abs(d.normalized.y) > 0.3f) continue; // 가로에 가까운 획만
-
-                    // 획의 아랫면: 두께 방향·깊이 방향 중 더 아래를 향하는 쪽
                     Vector2 ld = (b2 - a2).normalized;
-                    Vector3 n = tr.TransformVector(new Vector3(-ld.y, ld.x, 0) * (th * 0.5f));
-                    Vector3 depthV = tr.TransformVector(new Vector3(0, 0, dp * 0.5f));
-                    if (n.y > 0) n = -n;
-                    if (depthV.y > 0) depthV = -depthV;
-                    if (depthV.normalized.y < n.normalized.y) { var tmp = n; n = depthV; depthV = tmp; } // 아래쪽 = n, 옆으로 펼칠 쪽 = depthV
-
-                    float step = Mathf.Max(0.2f, c.s.icicleSpacing);
-                    int cnt = Mathf.Min(120, Mathf.FloorToInt(len / step));
-                    for (int k = 0; k < cnt && total < c.s.icicleMax; k++)
-                    {
-                        float t = (k + c.R(0.2f, 0.8f)) / Mathf.Max(1, cnt);
-                        Vector3 pos = A + d * t + n + depthV * c.R(-0.8f, 0.8f);
-                        if (pos.y < c.baseY + c.s.icicleMinHeight) continue;
-                        if (c.R(0, 1) < 0.15f) continue; // 군데군데 빈 곳
-                        float L = c.R(0.3f, 1.9f) * c.s.icicleSize;
-                        L = Mathf.Min(L, pos.y - c.baseY - 0.3f);
-                        if (L < 0.15f) continue;
-                        var ic = Obj(g, "고드름", mesh, icicleMat).transform;
-                        ic.position = pos;
-                        float r = Mathf.Clamp(L * 0.09f, 0.04f, 0.22f);
-                        ic.localScale = new Vector3(r * 2f, L, r * 2f);
-                        ic.rotation = Quaternion.Euler(c.R(-4f, 4f), c.R(0, 360), c.R(-4f, 4f));
-                        total++;
-                    }
+                    Vector3 thick = tr.TransformVector(new Vector3(-ld.y, ld.x, 0) * (th * 0.5f));
+                    Vector3 depth = tr.TransformVector(new Vector3(0, 0, dp * 0.5f));
+                    fn(p, A, B, thick, depth);
                 }
-            }
         }
-        if (total == 0) Debug.Log("[살천스럽다] 고드름을 달 만한 가로획이 없었어요. (높이가 Icicle Min Height보다 낮거나 세로획뿐)");
-        else Debug.Log($"[살천스럽다] 고드름 {total}개");
     }
 
-    // ───────────────────────────── ④ 눈·눈보라·후처리·돌풍·가로등
+    static void BuildJamoSnow(Ctx c)
+    {
+        var M = GetMats(c);
+
+        // 자모 윗면에 소복이 쌓인 눈
+        var stripG = Group(c, c.gen, "자모 위 눈");
+        if (c.s.snowOnJamo)
+        {
+            var strip = SaveMesh("자모 위 눈", SalcheonShapes.Strip());
+            int n = 0;
+            ForEachSegment(c, (p, A, B, thick, depth) =>
+            {
+                Vector3 d = B - A; float len = d.magnitude;
+                if (len < 0.3f) return;
+                // 위를 향하는 면 고르기
+                Vector3[] cand = { thick, -thick, depth, -depth };
+                int best = 0;
+                for (int i = 1; i < 4; i++) if (cand[i].normalized.y > cand[best].normalized.y) best = i;
+                Vector3 up = cand[best];
+                if (up.normalized.y < 0.45f) return;
+                Vector3 side = best < 2 ? depth : thick;
+                float width = side.magnitude * 2f;
+                float capH = Mathf.Clamp(width * 0.22f, 0.12f, 1.2f);
+                Vector3 upN = up.normalized, dirN = d / len;
+                Vector3 fwd = Vector3.Cross(dirN, upN);
+                if (fwd.sqrMagnitude < 1e-6f) return;
+                var t = Obj(stripG, "눈", strip, M.snow).transform;
+                t.position = (A + B) * 0.5f + up - upN * 0.02f;
+                t.rotation = Quaternion.LookRotation(fwd.normalized, upN);
+                t.localScale = new Vector3(len + thick.magnitude * 1.8f, capH, width * 1.04f);
+                n++;
+            });
+            Debug.Log("[살천스럽다] 자모 위 눈 " + n + "줄");
+        }
+
+        // 고드름
+        var icG = Group(c, c.gen, "고드름");
+        var icicle = SaveMesh("고드름", SalcheonShapes.Icicle());
+        int total = 0;
+        ForEachSegment(c, (p, A, B, thick, depth) =>
+        {
+            Vector3 d = B - A; float len = d.magnitude;
+            if (len < 0.8f || Mathf.Abs(d.normalized.y) > 0.3f) return;
+            Vector3 n = thick.y > 0 ? -thick : thick;
+            Vector3 dv = depth.y > 0 ? -depth : depth;
+            if (dv.normalized.y < n.normalized.y) { var tmp = n; n = dv; dv = tmp; }
+            if (n.normalized.y > -0.45f) return; // 아랫면이 아래를 안 보면 패스
+            float step = Mathf.Max(0.2f, c.s.icicleSpacing);
+            int cnt = Mathf.Min(120, Mathf.FloorToInt(len / step));
+            for (int k = 0; k < cnt && total < c.s.icicleMax; k++)
+            {
+                float t = (k + c.R(0.2f, 0.8f)) / Mathf.Max(1, cnt);
+                Vector3 pos = A + d * t + n + dv * c.R(-0.8f, 0.8f);
+                if (pos.y < c.baseY + c.s.icicleMinHeight) continue;
+                if (c.Chance(0.15f)) continue;
+                float L = Mathf.Min(c.R(0.3f, 1.9f) * c.s.icicleSize, pos.y - c.baseY - 0.3f);
+                if (L < 0.15f) continue;
+                var ic = Obj(icG, "고드름", icicle, M.icicle).transform;
+                ic.position = pos;
+                float r = Mathf.Clamp(L * 0.09f, 0.04f, 0.22f);
+                ic.localScale = new Vector3(r * 2f, L, r * 2f);
+                ic.rotation = Quaternion.Euler(c.R(-4f, 4f), c.R(0, 360), c.R(-4f, 4f));
+                total++;
+            }
+        });
+
+        // 자모 밑동에 쌓인 눈더미 (땅에 닿은 획 둘레)
+        var driftG = Group(c, c.gen, "자모 밑 눈더미");
+        if (c.s.jamoDrifts)
+        {
+            var mounds = new Mesh[3];
+            for (int i = 0; i < 3; i++) mounds[i] = SaveMesh("눈 더미 " + (i + 1), SalcheonShapes.Mound(100 + i));
+            int nd = 0;
+            ForEachSegment(c, (p, A, B, thick, depth) =>
+            {
+                Vector3 d = B - A; float len = d.magnitude;
+                float halfDown = Mathf.Abs(thick.y) + Mathf.Abs(depth.y);           // 획 상자의 위아래 절반
+                float halfSide = Mathf.Min(Flat3(thick).magnitude + Flat3(depth).magnitude, 12f); // 옆 절반
+                Vector3 dirFlat = Flat3(d);
+                Vector3 perp = Vector3.Cross(Vector3.up, dirFlat.sqrMagnitude > 1e-4f ? dirFlat.normalized : Vector3.forward);
+                int cnt = Mathf.Max(1, Mathf.FloorToInt(len / 4f));
+                for (int k = 0; k <= cnt && nd < 300; k++)
+                {
+                    Vector3 q = Vector3.Lerp(A, B, (float)k / cnt);
+                    if (q.y - halfDown > c.baseY + 1.2f) continue; // 땅에 닿은 부분만
+                    if (c.Chance(0.35f)) continue;
+                    float r = c.R(1.2f, 3.2f);
+                    float sideSign = c.Chance(0.5f) ? 1f : -1f;
+                    Vector3 pos = q + perp * sideSign * (halfSide + r * 0.25f);
+                    pos.y = c.baseY;
+                    var t = Obj(driftG, "눈더미", mounds[c.RI(0, 3)], M.snow).transform;
+                    t.position = pos;
+                    t.rotation = Quaternion.LookRotation(dirFlat.sqrMagnitude > 1e-4f ? dirFlat.normalized : Vector3.forward, Vector3.up) * Quaternion.Euler(0, 90f, 0);
+                    t.localScale = new Vector3(r * c.R(1.2f, 1.8f), r * c.R(0.35f, 0.6f), r);
+                    nd++;
+                }
+            });
+        }
+        Debug.Log("[살천스럽다] 고드름 " + total + "개");
+    }
+
+    // ───────────────────────────── ⑤ 눈·눈보라·후처리·돌풍·가로등 빛
     static void BuildAtmosphere(Ctx c)
     {
-        var particles = Group(c.gen, "파티클");
-        Vector3 w = c.s.windDirection; w.y = 0; if (w.sqrMagnitude < 1e-4f) w = Vector3.left; w.Normalize();
+        var M = GetMats(c);
+        var particles = Group(c, c.gen, "파티클");
+        Vector3 w = WindFlat(c);
         float areaK = Mathf.Clamp(c.area.width * c.area.height / 9000f, 0.3f, 8f);
         var snowMat = ParticleMat("눈입자", new Color(0.96f, 0.98f, 1f, 1f), Color.black);
         var glintMat = ParticleMat("반짝임", new Color(0.8f, 0.93f, 1f, 1f), new Color(0.8f, 0.93f, 1f) * 2.5f);
-        Vector3 ctr = new Vector3(c.center.x, 0, c.center.y);
+        Vector3 ctr = new Vector3(c.center.x, c.baseY, c.center.y);
 
-        // 눈: 자모 꼭대기 높이까지 공간 전체에 (중간에서 생겨나 부드럽게 나타남)
         float hK = c.topY / 25f;
-        var snow = Particles(particles, "눈", ctr + Vector3.up * (c.baseY + c.topY * 0.5f), new Vector3(c.area.width, c.topY, c.area.height),
-            life: 12f, rate: 160f * areaK * hK * c.s.snowAmount, size: new Vector2(0.05f, 0.13f),
-            vel: new Vector3(w.x * 2f, -1.2f, w.z * 2f), mat: snowMat, stretch: false, noise: true, alpha: 1f, sizeCurve: false, fade: true);
-        var drift = Particles(particles, "땅 눈보라", ctr + Vector3.up * (c.baseY + 0.8f), new Vector3(c.area.width, 1.5f, c.area.height),
-            life: 4f, rate: 250f * areaK * c.s.snowAmount, size: new Vector2(0.02f, 0.04f),
-            vel: new Vector3(w.x * 6.3f, 0f, w.z * 6.3f), mat: snowMat, stretch: true, noise: false, alpha: 0.35f, sizeCurve: false, fade: true);
-        Particles(particles, "얼음 반짝임", ctr + Vector3.up * (c.baseY + 4.5f), new Vector3(c.area.width * 0.8f, 9f, c.area.height * 0.8f),
-            life: 1.5f, rate: 120f * areaK, size: new Vector2(0.05f, 0.25f),
-            vel: Vector3.zero, mat: glintMat, stretch: false, noise: false, alpha: 1f, sizeCurve: true, fade: false);
+        var snow = Particles(particles, "눈", ctr + Vector3.up * (c.topY * 0.5f), new Vector3(c.area.width, c.topY, c.area.height),
+            12f, 160f * areaK * hK * c.s.snowAmount, new Vector2(0.05f, 0.13f), new Vector3(w.x * 2f, -1.2f, w.z * 2f), snowMat, false, true, 1f, false, true);
+        var drift = Particles(particles, "땅 눈보라", ctr + Vector3.up * 0.8f, new Vector3(c.area.width, 1.5f, c.area.height),
+            4f, 250f * areaK * c.s.snowAmount, new Vector2(0.02f, 0.04f), new Vector3(w.x * 6.3f, 0f, w.z * 6.3f), snowMat, true, false, 0.35f, false, true);
+        Particles(particles, "얼음 반짝임", ctr + Vector3.up * 4.5f, new Vector3(c.area.width * 0.8f, 9f, c.area.height * 0.8f),
+            1.5f, 120f * areaK, new Vector2(0.05f, 0.25f), Vector3.zero, glintMat, false, false, 1f, true, false);
         var bliz = Particles(particles, "카메라 눈보라", c.start, new Vector3(30f, 8f, 30f),
-            life: 2.5f, rate: 350f * c.s.blizzardAmount, size: new Vector2(0.02f, 0.06f),
-            vel: new Vector3(w.x * 9f, -1f, w.z * 9f), mat: snowMat, stretch: true, noise: false, alpha: 0.6f, sizeCurve: false, fade: true);
+            2.5f, 350f * c.s.blizzardAmount * (c.s.scary ? 1.4f : 1f), new Vector2(0.02f, 0.06f), new Vector3(w.x * 9f, -1f, w.z * 9f), snowMat, true, false, 0.6f, false, true);
 
         // 후처리 2개
-        var post = Group(c.gen, "후처리");
-        var mainProfile = Profile("살천 후처리", p =>
+        var post = Group(c, c.gen, "후처리");
+        var mainProfile = c.s.scary ? Profile("살천 후처리 (으스스)", p =>
+        {
+            p.Add<Tonemapping>(true).mode.Override(TonemappingMode.ACES);
+            var b = p.Add<Bloom>(true); b.threshold.Override(0.9f); b.intensity.Override(0.35f); b.scatter.Override(0.6f);
+            var v = p.Add<Vignette>(true); v.color.Override(new Color32(6, 10, 18, 255)); v.intensity.Override(0.5f); v.smoothness.Override(0.45f);
+            var ca = p.Add<ColorAdjustments>(true); ca.saturation.Override(-45f); ca.postExposure.Override(-0.35f); ca.contrast.Override(18f);
+            p.Add<WhiteBalance>(true).temperature.Override(-35f);
+            var fg = p.Add<FilmGrain>(true); fg.intensity.Override(0.35f);
+            p.Add<ChromaticAberration>(true).intensity.Override(0.15f);
+        }) : Profile("살천 후처리", p =>
         {
             p.Add<Tonemapping>(true).mode.Override(TonemappingMode.ACES);
             var b = p.Add<Bloom>(true); b.threshold.Override(0.85f); b.intensity.Override(0.5f); b.scatter.Override(0.55f);
@@ -609,8 +1255,8 @@ public static class SalcheonBuilder
             if (data) { Undo.RecordObject(data, "후처리 켜기"); data.renderPostProcessing = true; }
         }
 
-        // 찬바람 구역: ㄹ · ㄹ · ㄷ 자리 (없으면 자모 3개를 고름)
-        var zonesG = Group(c.gen, "찬바람 구역");
+        // 찬바람 구역: ㄹ · ㄹ · ㄷ
+        var zonesG = Group(c, c.gen, "찬바람 구역");
         var picks = new List<JamoPiece>();
         foreach (var p in c.ws.Pieces) if (p && (p.jamo == "ㄹ" || p.jamo == "ㄷ")) picks.Add(p);
         if (picks.Count == 0) foreach (var p in c.ws.Pieces) { if (p && picks.Count < 3) picks.Add(p); }
@@ -620,19 +1266,18 @@ public static class SalcheonBuilder
             var r = jp.visual ? jp.visual.GetComponent<Renderer>() : null;
             if (!r) continue;
             var b = r.bounds;
-            var z = new GameObject($"찬바람 구역 {zi++} ({jp.syllable} {jp.jamo})").AddComponent<ColdGustZone>();
+            var z = new GameObject("찬바람 구역 " + zi++ + " (" + jp.syllable + " " + jp.jamo + ")").AddComponent<ColdGustZone>();
             z.transform.SetParent(zonesG, false);
             z.transform.position = new Vector3(b.center.x, c.baseY, b.center.z);
             z.radius = Mathf.Clamp(Mathf.Max(b.extents.x, b.extents.z) * 0.6f, 4f, 20f);
             z.snow = snow; z.groundDrift = drift; z.blizzard = bliz; z.gustVolume = gustVol;
         }
 
-        // 가로등 빛: ㅏ 짧은 획 끝 / ㅂ 안쪽
+        // 자모 가로등 빛: ㅏ 팔 끝 / ㅂ 안쪽
         var lights = new List<Light>();
-        var lampG = Group(c.gen, "가로등 빛");
+        var lampG = Group(c, c.gen, "가로등 빛");
         if (c.s.makeLamps)
         {
-            var bulbMat = OwnOrNew("가로등 빛", new Color32(191, 228, 255, 255), 0f, 0.5f, new Color(0.75f, 0.9f, 1f) * 2f);
             var sphere = BuiltinMesh(PrimitiveType.Sphere);
             foreach (var p in c.ws.Pieces)
             {
@@ -644,7 +1289,6 @@ public static class SalcheonBuilder
                 {
                     var strokes = p.Strokes;
                     if (strokes.Count < 2) continue;
-                    // 짧은 획 = 오른쪽으로 뻗은 팔. 기둥에서 먼 쪽 끝
                     int shortI = 0; float shortL = float.MaxValue;
                     for (int i = 0; i < strokes.Count; i++)
                     {
@@ -655,20 +1299,34 @@ public static class SalcheonBuilder
                     Vector2 tip = s[0].x > s[s.Length - 1].x ? s[0] : s[s.Length - 1];
                     Vector3 wp = p.transform.TransformPoint(new Vector3(tip.x - p.pivot.x, tip.y - p.pivot.y, 0));
                     Vector3 down = -p.transform.up * (c.ws.strokeThickness * p.transform.lossyScale.y * 0.5f + 0.4f);
-                    lights.Add(Lamp(lampG, $"가로등 ({p.syllable} ㅏ)", wp + down, Mathf.Clamp(size * 0.012f, 0.3f, 1.4f), Mathf.Clamp(size * 0.25f, 8f, 30f), 3f, new Color32(191, 228, 255, 255), sphere, bulbMat));
+                    lights.Add(Lamp(lampG, "가로등 (" + p.syllable + " ㅏ)", wp + down, Mathf.Clamp(size * 0.012f, 0.3f, 1.4f), Mathf.Clamp(size * 0.25f, 8f, 30f), 3f, new Color32(191, 228, 255, 255), sphere, M.lampBulb));
                 }
                 else if (p.jamo == "ㅂ")
                 {
-                    lights.Add(Lamp(lampG, "갇힌 빛 (ㅂ)", r.bounds.center, Mathf.Clamp(size * 0.015f, 0.4f, 1.6f), Mathf.Clamp(size * 0.18f, 6f, 20f), 1.5f, new Color32(159, 216, 255, 255), sphere, bulbMat));
+                    lights.Add(Lamp(lampG, "갇힌 빛 (ㅂ)", r.bounds.center, Mathf.Clamp(size * 0.015f, 0.4f, 1.6f), Mathf.Clamp(size * 0.18f, 6f, 20f), 1.5f, new Color32(159, 216, 255, 255), sphere, M.lampBulb));
                 }
             }
         }
 
-        var amb = c.gen.GetComponent<SalcheonAmbience>() ?? Undo.AddComponent<SalcheonAmbience>(c.gen.gameObject);
+        var amb = c.gen.GetComponent<SalcheonAmbience>();
+        if (amb == null) amb = Undo.AddComponent<SalcheonAmbience>(c.gen.gameObject);
         Undo.RecordObject(amb, "분위기");
         amb.blizzard = bliz.transform;
-        amb.flickerLights = lights.ToArray();
         amb.blizzardOffset = new Vector3(-w.x * 6f, 1f, -w.z * 6f);
+        amb.flickerAmount = c.s.scary ? 0.4f : 0.15f;
+
+        // 무서운 분위기: 어두운 안개·낮은 빛·가끔 숨 멎는 순간
+        var mood = c.gen.GetComponent<SalcheonMood>();
+        if (c.s.scary)
+        {
+            if (mood == null) mood = Undo.AddComponent<SalcheonMood>(c.gen.gameObject);
+            Undo.RecordObject(mood, "분위기");
+            mood.stopDuringHush = new[] { snow, drift, bliz };
+        }
+        else if (mood != null) Undo.DestroyObjectImmediate(mood);
+        var all = new List<Light>(lights);
+        if (amb.flickerLights != null) foreach (var l in amb.flickerLights) if (l && !l.transform.IsChildOf(lampG)) all.Add(l);
+        amb.flickerLights = all.ToArray();
     }
 
     static Light Lamp(Transform parent, string name, Vector3 pos, float bulb, float range, float intensity, Color color, Mesh sphere, Material bulbMat)
@@ -677,7 +1335,6 @@ public static class SalcheonBuilder
         go.transform.SetParent(parent, false);
         go.transform.position = pos;
         var b = Obj(go.transform, "전구", sphere, bulbMat);
-        b.transform.localPosition = Vector3.zero;
         b.transform.localScale = Vector3.one * bulb;
         b.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
         var l = go.AddComponent<Light>();
@@ -685,14 +1342,15 @@ public static class SalcheonBuilder
         return l;
     }
 
-    // 자라날 것들을 SalcheonFrost에 연결 (처음엔 숨겼다가 글자 도착 후 자라남)
+    // 글자 도착 후 자라날 것들 연결
     static void EnsureRuntime(Ctx c)
     {
         if (!c.gen) return;
-        var f = c.gen.GetComponent<SalcheonFrost>() ?? Undo.AddComponent<SalcheonFrost>(c.gen.gameObject);
+        var f = c.gen.GetComponent<SalcheonFrost>();
+        if (f == null) f = Undo.AddComponent<SalcheonFrost>(c.gen.gameObject);
         Undo.RecordObject(f, "서리 연출");
         var list = new List<Transform>();
-        foreach (var n in new[] { "고드름", "얼음 결정 무리", "얼음 기둥" })
+        foreach (var n in new[] { "자모 위 눈", "고드름", "자모 밑 눈더미", "얼음 결정 무리" })
         {
             var t = c.gen.Find(n);
             if (t) list.Add(t);
@@ -700,7 +1358,7 @@ public static class SalcheonBuilder
         f.growGroups = list.ToArray();
     }
 
-    // ───────────────────────────── 파티클 · 후처리 만들기
+    // ───────────────────────────── 파티클 · 후처리
     static ParticleSystem Particles(Transform parent, string name, Vector3 pos, Vector3 box, float life, float rate, Vector2 size,
                                     Vector3 vel, Material mat, bool stretch, bool noise, float alpha, bool sizeCurve, bool fade)
     {
@@ -721,7 +1379,6 @@ public static class SalcheonBuilder
         main.maxParticles = Mathf.Clamp(Mathf.CeilToInt(rate * life * 1.15f), 50, 30000);
 
         var em = ps.emission; em.enabled = true; em.rateOverTime = rate;
-
         var sh = ps.shape; sh.enabled = true; sh.shapeType = ParticleSystemShapeType.Box; sh.position = Vector3.zero; sh.scale = box;
 
         var v = ps.velocityOverLifetime;
@@ -751,14 +1408,12 @@ public static class SalcheonBuilder
         r.receiveShadows = false;
         if (stretch) { r.renderMode = ParticleSystemRenderMode.Stretch; r.velocityScale = 0.08f; r.lengthScale = 1f; }
         else r.renderMode = ParticleSystemRenderMode.Billboard;
-
-        Undo.RegisterCreatedObjectUndo(go, name);
         return ps;
     }
 
     static Material ParticleMat(string name, Color color, Color emission)
     {
-        string path = $"{MatDir}/{name}.mat";
+        string path = MatDir + "/" + name + ".mat";
         var m = AssetDatabase.LoadAssetAtPath<Material>(path);
         if (m) return m;
         var sh = Shader.Find("Universal Render Pipeline/Particles/Unlit");
@@ -767,14 +1422,7 @@ public static class SalcheonBuilder
         if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
         if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
-        // 반투명 (Transparent, Alpha 블렌드)
-        m.SetFloat("_Surface", 1f); m.SetFloat("_Blend", 0f);
-        m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha); m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-        m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One); m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
-        m.SetFloat("_ZWrite", 0f);
-        m.SetOverrideTag("RenderType", "Transparent");
-        m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        m.renderQueue = (int)RenderQueue.Transparent;
+        MakeTransparent(m);
         if (emission.maxColorComponent > 0)
         {
             m.EnableKeyword("_EMISSION");
@@ -784,11 +1432,22 @@ public static class SalcheonBuilder
         return m;
     }
 
+    static void MakeTransparent(Material m)
+    {
+        m.SetFloat("_Surface", 1f); m.SetFloat("_Blend", 0f);
+        m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha); m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One); m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+        m.SetFloat("_ZWrite", 0f);
+        m.SetOverrideTag("RenderType", "Transparent");
+        m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        m.renderQueue = (int)RenderQueue.Transparent;
+    }
+
     static VolumeProfile Profile(string name, System.Action<VolumeProfile> fill)
     {
-        string path = $"{Dir}/{name}.asset";
+        string path = Dir + "/" + name + ".asset";
         var p = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path);
-        if (p) return p; // 이미 있으면 그대로 (손으로 조절한 값 유지)
+        if (p) return p; // 손으로 조절한 값 유지
         p = ScriptableObject.CreateInstance<VolumeProfile>();
         AssetDatabase.CreateAsset(p, path);
         fill(p);
@@ -801,34 +1460,25 @@ public static class SalcheonBuilder
         return p;
     }
 
-    // ───────────────────────────── 재질
+    // ───────────────────────────── 재질 (이미 있으면 그대로 → 직접 바꾼 색 유지)
     static Material OwnOrNew(string name, Color color, float metallic, float smooth, Color? emission = null)
     {
-        var own = AssetDatabase.LoadAssetAtPath<Material>($"{OwnMatDir}/{name}.mat");
+        var own = AssetDatabase.LoadAssetAtPath<Material>(OwnMatDir + "/" + name + ".mat");
         return own ? own : Mat(name, color, metallic, smooth, emission);
     }
 
     static Material Mat(string name, Color color, float metallic, float smooth, Color? emission = null)
     {
-        string path = $"{MatDir}/{name}.mat";
+        string path = MatDir + "/" + name + ".mat";
         var m = AssetDatabase.LoadAssetAtPath<Material>(path);
         if (m) return m;
-        var tmp = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        m = new Material(tmp.GetComponent<Renderer>().sharedMaterial);
-        Object.DestroyImmediate(tmp);
+        var sh = Shader.Find("Universal Render Pipeline/Lit");
+        m = new Material(sh ? sh : Shader.Find("Standard"));
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
         if (m.HasProperty("_Color")) m.SetColor("_Color", color);
         if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", metallic);
         if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", smooth);
-        if (color.a < 0.99f)
-        {
-            m.SetFloat("_Surface", 1f); m.SetFloat("_Blend", 0f);
-            m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha); m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-            m.SetFloat("_ZWrite", 0f);
-            m.SetOverrideTag("RenderType", "Transparent");
-            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            m.renderQueue = (int)RenderQueue.Transparent;
-        }
+        if (color.a < 0.99f) MakeTransparent(m);
         if (emission.HasValue)
         {
             m.EnableKeyword("_EMISSION");
@@ -840,14 +1490,13 @@ public static class SalcheonBuilder
         return m;
     }
 
-    // ───────────────────────────── 메시
-    static GameObject Obj(Transform parent, string name, Mesh mesh, Material mat)
+    // ───────────────────────────── 메시 · 오브젝트
+    static GameObject Obj(Transform parent, string name, Mesh mesh, params Material[] mats)
     {
         var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
         go.transform.SetParent(parent, false);
         go.GetComponent<MeshFilter>().sharedMesh = mesh;
-        go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-        go.isStatic = false;
+        go.GetComponent<MeshRenderer>().sharedMaterials = mats;
         return go;
     }
 
@@ -859,33 +1508,27 @@ public static class SalcheonBuilder
         return m;
     }
 
-    // 같은 이름 파일이 있으면: overwrite면 내용을 바꿔 넣고(참조 유지), 아니면 기존 것 사용
-    static Mesh SaveMesh(string name, Mesh fresh, bool overwrite)
+    // 같은 이름 파일이 있으면 내용만 바꿔 넣음 (씬의 참조 유지)
+    static Mesh SaveMesh(string name, Mesh fresh)
     {
-        string path = $"{MeshDir}/{name}.asset";
+        string path = MeshDir + "/" + name + ".asset";
+        fresh.name = name;
         var old = AssetDatabase.LoadAssetAtPath<Mesh>(path);
-        if (old && !overwrite) { Object.DestroyImmediate(fresh); return old; }
         if (old)
         {
-            old.Clear();
-            old.indexFormat = fresh.indexFormat;
-            old.SetVertices(new List<Vector3>(fresh.vertices));
-            old.SetNormals(new List<Vector3>(fresh.normals));
-            old.SetUVs(0, new List<Vector2>(fresh.uv));
-            old.SetTriangles(fresh.triangles, 0);
-            old.RecalculateBounds();
+            EditorUtility.CopySerialized(fresh, old);
+            old.name = name;
             Object.DestroyImmediate(fresh);
             EditorUtility.SetDirty(old);
             return old;
         }
-        fresh.name = name;
         AssetDatabase.CreateAsset(fresh, path);
         return fresh;
     }
 
     static Mesh GroundMesh(Ctx c, Rect r)
     {
-        float step = Mathf.Max(1.5f, Mathf.Max(r.width, r.height) / 160f);
+        float step = Mathf.Max(1.5f, Mathf.Max(r.width, r.height) / 180f);
         int nx = Mathf.CeilToInt(r.width / step) + 1, nz = Mathf.CeilToInt(r.height / step) + 1;
         var v = new List<Vector3>(nx * nz); var uv = new List<Vector2>(nx * nz);
         for (int j = 0; j < nz; j++)
@@ -910,92 +1553,8 @@ public static class SalcheonBuilder
         return m;
     }
 
-    // 면마다 꼭짓점을 따로 둬서 각진(로우폴리) 느낌
-    static Mesh Faceted(List<Vector3> tris)
-    {
-        var n = new List<Vector3>(tris.Count); var idx = new List<int>(tris.Count); var uv = new List<Vector2>(tris.Count);
-        for (int i = 0; i < tris.Count; i += 3)
-        {
-            Vector3 nn = Vector3.Cross(tris[i + 1] - tris[i], tris[i + 2] - tris[i]).normalized;
-            for (int k = 0; k < 3; k++) { n.Add(nn); idx.Add(i + k); uv.Add(new Vector2(tris[i + k].x, tris[i + k].y)); }
-        }
-        var m = new Mesh();
-        m.SetVertices(tris); m.SetNormals(n); m.SetUVs(0, uv); m.SetTriangles(idx, 0);
-        m.RecalculateBounds();
-        return m;
-    }
-
-    static Vector3 RingAt(int i, float y, float r, int n)
-    {
-        float a = i * Mathf.PI * 2f / n;
-        return new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r);
-    }
-
-    static void Tri(List<Vector3> t, Vector3 a, Vector3 b, Vector3 c) { t.Add(a); t.Add(b); t.Add(c); }
-
-    // 얼음 결정: 밑동(0) → 육각기둥(0.75) → 뾰족한 끝(1)
-    static Mesh CrystalMesh()
-    {
-        var t = new List<Vector3>();
-        const int N = 6;
-        Vector3 tip = new Vector3(0, 1f, 0), bottom = new Vector3(0, 0, 0);
-        for (int i = 0; i < N; i++)
-        {
-            Vector3 a0 = RingAt(i, 0, 0.5f, N), a1 = RingAt(i + 1, 0, 0.5f, N), b0 = RingAt(i, 0.75f, 0.5f, N), b1 = RingAt(i + 1, 0.75f, 0.5f, N);
-            Tri(t, a0, b0, b1); Tri(t, a0, b1, a1);   // 옆면
-            Tri(t, b0, tip, b1);                      // 끝
-            Tri(t, a0, a1, bottom);                   // 밑면
-        }
-        return Faceted(t);
-    }
-
-    // 고드름: 위(0)에 붙어서 아래(-1)로 뾰족 → 위에서 아래로 자라남
-    static Mesh IcicleMesh()
-    {
-        var t = new List<Vector3>();
-        const int N = 6;
-        Vector3 tip = new Vector3(0, -1f, 0), top = Vector3.zero;
-        for (int i = 0; i < N; i++)
-        {
-            Vector3 a0 = RingAt(i, 0, 0.5f, N), a1 = RingAt(i + 1, 0, 0.5f, N), b0 = RingAt(i, -0.3f, 0.32f, N), b1 = RingAt(i + 1, -0.3f, 0.32f, N);
-            Tri(t, a0, a1, b1); Tri(t, a0, b1, b0);
-            Tri(t, b0, b1, tip);
-            Tri(t, a1, a0, top);
-        }
-        return Faceted(t);
-    }
-
-    // 설산 언덕: 울퉁불퉁한 원뿔 (밑지름 2, 높이 1)
-    static Mesh HillMesh(int seed)
-    {
-        var rng = new System.Random(seed);
-        System.Func<float, float, float> R = (a, b) => a + (float)rng.NextDouble() * (b - a);
-        const int N = 10;
-        float[] ys = { 0f, 0.4f, 0.72f };
-        float[] rs = { 1f, 0.62f, 0.3f };
-        var rings = new Vector3[ys.Length, N];
-        for (int k = 0; k < ys.Length; k++)
-            for (int i = 0; i < N; i++)
-            {
-                float a = (i + R(-0.2f, 0.2f)) * Mathf.PI * 2f / N, rr = rs[k] * R(0.78f, 1.12f);
-                rings[k, i] = new Vector3(Mathf.Cos(a) * rr, ys[k] + (k == 0 ? 0 : R(-0.05f, 0.05f)), Mathf.Sin(a) * rr);
-            }
-        Vector3 apex = new Vector3(R(-0.1f, 0.1f), 1f, R(-0.1f, 0.1f));
-        var t = new List<Vector3>();
-        for (int k = 0; k + 1 < ys.Length; k++)
-            for (int i = 0; i < N; i++)
-            {
-                int j = (i + 1) % N;
-                Tri(t, rings[k, i], rings[k + 1, i], rings[k + 1, j]);
-                Tri(t, rings[k, i], rings[k + 1, j], rings[k, j]);
-            }
-        int last = ys.Length - 1;
-        for (int i = 0; i < N; i++) Tri(t, rings[last, i], apex, rings[last, (i + 1) % N]);
-        return Faceted(t);
-    }
-
-    // ───────────────────────────── 기타
-    static Vector2 Flat(Vector3 v) => new Vector2(v.x, v.z);
+    static Vector2 Flat(Vector3 v) { return new Vector2(v.x, v.z); }
+    static Vector3 Flat3(Vector3 v) { return new Vector3(v.x, 0, v.z); }
 
     static void EnsureFolder(string path)
     {
