@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// 길차다 숲 분위기: 카메라가 깊이 들어갈수록 남색 어둠 → 하늘빛 안개 속 세계수
+// 길차다 숲 분위기: 아침 햇살이 무성한 잎에 가려진 숲길 → 옅은 안개 속 세계수
 public class ForestAtmosphere : MonoBehaviour
 {
     [Header("따라갈 카메라 (비우면 메인 카메라)")]
@@ -11,21 +11,30 @@ public class ForestAtmosphere : MonoBehaviour
     public float darkUntilZ = 40f;
     public float lightFromZ = 90f;
 
+    [Header("세계수 입구 연출이 시작되면 하늘이 열림")]
+    [Tooltip("어두운 숲길 → 밝은 공터로 바뀌는 시간 (초)")] public float revealSeconds = 4f;
+    [Tooltip("이 z보다 숲길 쪽으로 되돌아가면 다시 어두워짐")] public float revealResetZ = 70f;
+    bool revealed;
+    float revealK;
+
+    /// <summary>지금부터 하늘이 밝아지기 시작 (GilchadaWalk 입구 연출이 부름)</summary>
+    public void Reveal() => revealed = true;
+
     [Header("안개")]
-    public Color fogDark = new Color32(0x0b, 0x1c, 0x26, 255);
-    public Color fogLight = new Color32(0x7f, 0xb0, 0xbf, 255);
-    public float densityDark = .05f;
-    public float densityLight = .022f;
+    public Color fogDark = new Color32(0x3e, 0x5c, 0x52, 255);
+    public Color fogLight = new Color32(0x8f, 0xba, 0xb2, 255);
+    public float densityDark = .012f;
+    public float densityLight = .016f;
 
     [Header("주변광 (하늘 · 지평선 · 땅)")]
-    public Color ambientSky = new Color32(0x7f, 0xb3, 0xc9, 255);
-    public Color ambientEquator = new Color32(0x3a, 0x5c, 0x5a, 255);
-    public Color ambientGround = new Color32(0x1f, 0x3a, 0x22, 255);
-    public float ambientDark = .28f, ambientLight = .75f;
+    public Color ambientSky = new Color32(0xa3, 0xc9, 0xb4, 255);
+    public Color ambientEquator = new Color32(0x5a, 0x7f, 0x66, 255);
+    public Color ambientGround = new Color32(0x2f, 0x3f, 0x2b, 255);
+    public float ambientDark = .85f, ambientLight = 1f;
 
     [Header("빛")]
     public Light sun;
-    public float sunDark = .6f, sunLight = 1.1f;
+    public float sunDark = 1.6f, sunLight = 1.4f;
     public Light treeLight;     // 세계수 아래 초록빛
     public float treeLightMax = 3f;
     public Light spiritLight;   // 세계수 위 정령빛
@@ -40,7 +49,10 @@ public class ForestAtmosphere : MonoBehaviour
     {
         Transform t = target ? target : (Camera.main ? Camera.main.transform : null);
         if (t == null) return;
-        float k = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(darkUntilZ, lightFromZ, t.position.z));
+        float kz = Mathf.InverseLerp(darkUntilZ, lightFromZ, t.position.z);
+        if (revealed && t.position.z < revealResetZ) revealed = false;
+        revealK = Mathf.MoveTowards(revealK, revealed ? 1 : 0, Time.deltaTime / Mathf.Max(.1f, revealSeconds));
+        float k = Mathf.SmoothStep(0, 1, Mathf.Max(kz, revealK));
         Apply(k, Time.time);
     }
 

@@ -167,6 +167,8 @@ public class GilchadaWalk : MonoBehaviour
                 {
                     intro = Intro.Playing; introT = 0; introStartRot = t.rotation;
                     introLook = LookPoint();
+                    var atmo = FindAnyObjectByType<ForestAtmosphere>();
+                    if (atmo) atmo.Reveal();   // 이 순간부터 하늘이 열리며 밝아짐
                     ec.MovementEnabled = false;   // 잠깐 조작 멈춤
                     ec.MouseLookEnabled = false;
                 }
