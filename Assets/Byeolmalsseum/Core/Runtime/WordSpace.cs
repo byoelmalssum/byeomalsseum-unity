@@ -54,8 +54,10 @@ namespace Byeolmalsseum
         [Header("이동 범위")]
         [Tooltip("자동: 공간에 놓인 물체 전체 크기 + 여유 (공간을 넓히면 범위도 같이 넓어짐)\n직접지정: 아래 중심·크기 값\n제한없음: 어디든 갈 수 있음")]
         public BoundsMode boundsMode = BoundsMode.자동;
-        [Tooltip("자동 범위: 가장 바깥 물체보다 얼마나 더 나갈 수 있는지 (m). 아래쪽은 가장 낮은 물체 높이까지만")]
+        [Tooltip("자동 범위: 가장 바깥 물체보다 얼마나 더 나갈 수 있는지 (m)")]
         public float boundsPadding = 5f;
+        [Tooltip("자동 범위: 카메라가 이 높이 아래로는 못 내려감 (땅 뚫기 방지). 땅 아래 공간을 만들었다면 낮추세요")]
+        public float floorHeight = 0f;
         public Vector3 manualBoundsCenter = new Vector3(0, 5, 0);
         public Vector3 manualBoundsSize = new Vector3(40, 15, 40);
 
@@ -257,7 +259,7 @@ namespace Byeolmalsseum
 
             float p = Mathf.Max(0, boundsPadding);
             Vector3 min = raw.min - new Vector3(p, 0, p);
-            min.y = raw.min.y + .3f; // 가장 낮은 물체(바닥) 아래로는 못 내려감
+            min.y = Mathf.Max(raw.min.y + .3f, floorHeight + .5f); // 바닥(floorHeight) 아래로는 못 내려감 (눈높이 여유 0.5m)
             Vector3 max = raw.max + new Vector3(p, p, p);
             var b = new Bounds();
             b.SetMinMax(min, Vector3.Max(max, min + Vector3.one * .1f));
