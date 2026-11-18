@@ -72,7 +72,7 @@ public class GilchadaForest : MonoBehaviour
     {
         var ws = FindWordSpace(); if (ws == null) return;
         if (!EditorUtility.DisplayDialog("길차다 숲",
-            highQuality ? "나무·땅 모양을 부드럽게 바꾸고, 빛 번짐·색감 후처리를 켜요.\n배치는 그대로예요. 직접 고친 것도 그대로 남아요."
+            highQuality ? "나무·땅 모양을 부드럽게 바꾸고, 빛 번짐·색감 후처리와 아침 숲 분위기를 적용해요.\n배치는 그대로예요. 직접 고친 것도 그대로 남아요."
                         : "나무·땅 모양을 각진 로우폴리로 되돌려요.\n배치는 그대로예요.", "바꾸기", "취소")) return;
         HQ = highQuality;
         meshes.Clear();
@@ -86,9 +86,31 @@ public class GilchadaForest : MonoBehaviour
         SaveMesh("땅", GroundMesh());
         if (HQ) SetupPostProcessing(ws, transform);
         else { var v = transform.Find(PostName); if (v) Undo.DestroyObjectImmediate(v.gameObject); }
+        ApplyMorningLook(transform);
         AssetDatabase.SaveAssets();
         EditorSceneManager.MarkSceneDirty(gameObject.scene);
         Debug.Log(HQ ? "[길차다 숲] 고퀄 모드로 바꿨어요." : "[길차다 숲] 로우폴리로 되돌렸어요.");
+    }
+
+    public void ButtonDetail()
+    {
+        var ws = FindWordSpace(); if (ws == null) return;
+        var f = transform.Find(GroupName);
+        if (f == null) { EditorUtility.DisplayDialog("길차다 숲", "먼저 ① 숲 만들기를 눌러 주세요.", "확인"); return; }
+        if (!EditorUtility.DisplayDialog("길차다 숲",
+            "① 숲길 양옆을 덤불·나무로 빽빽하게 채우고\n② 나무 잎을 찰흙 덩어리 대신 나뭇잎이 겹친 모양으로 바꾸고\n③ 숲길(깊은 그늘) ↔ 세계수 공터(밝은 안개빛) 대비를 크게 해요.\n\n직접 고친 배치는 그대로예요.", "적용", "취소")) return;
+        Undo.SetCurrentGroupName("숲 디테일");
+        int ug = Undo.GetCurrentGroup();
+        forest = f; HQ = highQuality; rng = new System.Random(23);
+        mats.Clear(); meshes.Clear();
+        EnsureFolder(AssetDir); EnsureFolder(AssetDir + "/Meshes"); EnsureFolder(AssetDir + "/Materials"); EnsureFolder(AssetDir + "/Textures");
+        if (f.Find(WallName) == null) BuildPathWalls();
+        AddLeafCards(f);
+        ApplyMorningLook(transform);
+        AssetDatabase.SaveAssets();
+        Undo.CollapseUndoOperations(ug);
+        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Debug.Log("[길차다 숲] 숲길 벽 · 나뭇잎 디테일 · 분위기 대비를 적용했어요.");
     }
 
     public void ButtonCameraPath()
@@ -159,6 +181,7 @@ public class GilchadaForest : MonoBehaviour
         SetupCameraPath(ws, owner.cameraSpeed);
 
         if (HQ) SetupPostProcessing(ws, owner.transform);
+        ApplyMorningLook(owner.transform);
         atmo.Apply(0, 0);
         AssetDatabase.SaveAssets();
         Undo.CollapseUndoOperations(undoGroup);
@@ -366,6 +389,207 @@ public class GilchadaForest : MonoBehaviour
         return t;
     }
 
+    // ───────────────────────────── 숲길 양옆 벽 (덤불 + 나무 두세 겹)
+    const string WallName = "숲길 양옆 숲 (길로 이끄는 벽)";
+
+    static void Bush(Transform parent, float x, float z, float s)
+    {
+        var t = Child(parent, "덤불", new Vector3(x, H(x, z), z));
+        int n = 3 + rng.Next(3);
+        for (int k = 0; k < n; k++)
+        {
+            float r = R(1, 1.8f) * s;
+            Part(t, "잎", Ico(), Leaf(rng.Next(4)), new Vector3(R(-1.2f, 1.2f) * s, R(.5f, 1.8f) * s, R(-1.2f, 1.2f) * s),
+                 Quaternion.Euler(R(0, 40), R(0, 360), 0), new Vector3(r, r * R(.7f, .9f), r));
+        }
+        Sway(t, 2f, R(1, 1.5f));
+    }
+
+    static void BuildPathWalls()
+    {
+        var g = Group(WallName);
+        for (float z = -14; z < 80; z += R(1.6f, 2.6f))
+            foreach (int side in new[] { -1, 1 })
+            {
+                bool nearJamo = JamoZ.Any(j => Mathf.Abs(z - j) < 6);
+                float px = PathX(z);
+                if (!nearJamo) Bush(g, px + side * R(3.6f, 6f), z, R(.8f, 1.3f));          // 길 바로 옆 덤불
+                if (rng.NextDouble() < .55) Broadleaf(g, px + side * R(8, 13), z, R(.9f, 1.3f), -side); // 두 번째 줄 나무
+                if (rng.NextDouble() < .3) TallTree(g, px + side * R(13, 20), z, R(.5f, .7f));          // 뒤쪽 큰 나무
+            }
+    }
+
+    // ───────────────────────────── 나뭇잎 카드 (찰흙 덩어리 → 잎이 겹친 모양)
+    static void AddLeafCards(Transform root)
+    {
+        var sphereCards = SphereCards(); var coneCards = ConeCards();
+        var list = new List<MeshRenderer>(root.GetComponentsInChildren<MeshRenderer>(true));
+        foreach (var r in list)
+        {
+            var mf = r.GetComponent<MeshFilter>(); if (mf == null || mf.sharedMesh == null) continue;
+            var src = r.sharedMaterial; if (src == null) continue;
+            bool leafy = src.name.StartsWith("잎") || src.name.StartsWith("수관");
+            if (!leafy || src.name.StartsWith("잎카드") || src.name.StartsWith("잎속")) continue;
+            if (r.transform.Find("잎 카드")) continue;
+            Mesh cards = mf.sharedMesh.name == "이십면체" ? sphereCards : mf.sharedMesh.name == "원뿔6" ? coneCards : null;
+            if (cards == null) continue;
+            var go = new GameObject("잎 카드", typeof(MeshFilter), typeof(MeshRenderer));
+            Undo.RegisterCreatedObjectUndo(go, "잎 카드");
+            go.transform.SetParent(r.transform, false);
+            go.transform.localScale = Vector3.one * 1.06f;
+            go.GetComponent<MeshFilter>().sharedMesh = cards;
+            var cr = go.GetComponent<MeshRenderer>();
+            cr.sharedMaterial = LeafCardMat(src);
+            cr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; // 잎 사이로 얼룩진 그림자
+            // 안쪽 덩어리는 조금 작고 어둡게 → 잎 사이 틈이 깊어 보임
+            Undo.RecordObject(r.transform, "잎");
+            r.transform.localScale *= .88f;
+            Undo.RecordObject(r, "잎");
+            r.sharedMaterial = DarkInner(src);
+        }
+    }
+
+    static Material DarkInner(Material src)
+    {
+        string path = $"{AssetDir}/Materials/잎속 {src.name}.mat";
+        var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m) return m;
+        m = new Material(src);
+        Color c = src.HasProperty("_BaseColor") ? src.GetColor("_BaseColor") : Color.green;
+        Color dark = c * .55f; dark.a = 1;
+        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", dark);
+        if (m.HasProperty("_Color")) m.SetColor("_Color", dark);
+        AssetDatabase.CreateAsset(m, path);
+        return m;
+    }
+
+    static Material LeafCardMat(Material src)
+    {
+        string path = $"{AssetDir}/Materials/잎카드 {src.name}.mat";
+        var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m) return m;
+        m = new Material(src);
+        Color c = src.HasProperty("_BaseColor") ? src.GetColor("_BaseColor") : Color.green;
+        Color tint = Color.Lerp(c, new Color(.55f, .8f, .45f), .25f) * 1.35f; tint.a = 1;
+        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", tint);
+        if (m.HasProperty("_Color")) m.SetColor("_Color", tint);
+        var tex = LeafTexture();
+        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
+        if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+        if (m.HasProperty("_AlphaClip")) m.SetFloat("_AlphaClip", 1);
+        if (m.HasProperty("_Cutoff")) m.SetFloat("_Cutoff", .45f);
+        m.EnableKeyword("_ALPHATEST_ON");
+        if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0);   // 앞뒤 모두 보이게
+        if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", .12f);
+        if (m.HasProperty("_EmissionColor")) { m.SetColor("_EmissionColor", Color.black); m.DisableKeyword("_EMISSION"); }
+        m.renderQueue = 2450;
+        m.enableInstancing = true;
+        AssetDatabase.CreateAsset(m, path);
+        return m;
+    }
+
+    // 잎 무늬 텍스처 (여러 장의 잎이 겹친 모양, 투명 배경)
+    static Texture2D LeafTexture()
+    {
+        string path = $"{AssetDir}/Textures/잎.png";
+        var t = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (t) return t;
+        const int S = 512;
+        var px = new Color32[S * S];
+        var r = new System.Random(5);
+        float F(double a, double b) => (float)(a + r.NextDouble() * (b - a));
+        for (int n = 0; n < 230; n++)
+        {
+            float cx = F(40, S - 40), cy = F(40, S - 40);
+            // 가운데로 모일수록 촘촘 (가장자리는 성글게 → 잎 덩어리 윤곽이 들쭉날쭉)
+            float dc = Vector2.Distance(new Vector2(cx, cy), new Vector2(S / 2, S / 2)) / (S / 2);
+            if (dc > .95f || r.NextDouble() < dc * .6f) continue;
+            float len = F(26, 52), wid = len * F(.38f, .5f), ang = F(0, Mathf.PI * 2);
+            float ca = Mathf.Cos(ang), sa = Mathf.Sin(ang);
+            float shade = F(.62f, 1f);
+            int x0 = Mathf.Max(0, (int)(cx - len)), x1 = Mathf.Min(S - 1, (int)(cx + len));
+            int y0 = Mathf.Max(0, (int)(cy - len)), y1 = Mathf.Min(S - 1, (int)(cy + len));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float dx = x - cx, dy = y - cy;
+                    float u = (dx * ca + dy * sa) / len;      // 잎 길이 방향 -1..1
+                    float v = (-dx * sa + dy * ca) / wid;     // 잎 폭 방향
+                    float w = 1 - u * u;                      // 끝이 뾰족한 잎 모양
+                    if (w <= 0 || Mathf.Abs(v) > w * (1 - .35f * u)) continue;
+                    float vein = Mathf.Abs(v) < .06f ? .82f : 1f;
+                    float light = shade * vein * (1 - .25f * (u + 1) * .5f) * (1 - .15f * Mathf.Abs(v));
+                    byte g = (byte)(Mathf.Clamp01(light) * 255);
+                    px[y * S + x] = new Color32(g, g, g, 255);
+                }
+        }
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        tex.SetPixels32(px); tex.Apply();
+        System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+        AssetDatabase.ImportAsset(path);
+        var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+        imp.alphaIsTransparency = true; imp.mipmapEnabled = true; imp.wrapMode = TextureWrapMode.Clamp;
+        imp.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    // 구 표면을 덮는 잎 카드들 (법선은 구 방향 → 덩어리 전체가 부드럽게 빛을 받음)
+    static Mesh SphereCards()
+    {
+        const string name = "잎카드구";
+        var verts = new List<Vector3>(); var norms = new List<Vector3>(); var uvs = new List<Vector2>(); var tris = new List<int>();
+        var r = new System.Random(3);
+        int N = 64;
+        for (int i = 0; i < N; i++)
+        {
+            float y = 1 - 2f * (i + .5f) / N, rad = Mathf.Sqrt(1 - y * y), phi = i * 2.39996f;
+            Vector3 dir = new Vector3(Mathf.Cos(phi) * rad, y, Mathf.Sin(phi) * rad);
+            Card(verts, norms, uvs, tris, dir * (float)(.82 + r.NextDouble() * .2), dir, (float)(.55 + r.NextDouble() * .3), r);
+        }
+        return SaveCards(name, verts, norms, uvs, tris);
+    }
+
+    // 원뿔(침엽수) 표면 잎 카드
+    static Mesh ConeCards()
+    {
+        const string name = "잎카드원뿔";
+        var verts = new List<Vector3>(); var norms = new List<Vector3>(); var uvs = new List<Vector2>(); var tris = new List<int>();
+        var r = new System.Random(4);
+        for (int i = 0; i < 46; i++)
+        {
+            float h = Mathf.Pow((float)r.NextDouble(), .8f) * .92f, a = (float)(r.NextDouble() * Mathf.PI * 2);
+            float rad = (1 - h) * (float)(.8 + r.NextDouble() * .2);
+            Vector3 out1 = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            Vector3 nrm = (out1 + Vector3.up * .5f).normalized;
+            Card(verts, norms, uvs, tris, out1 * rad + Vector3.up * h, nrm, (float)(.35 + r.NextDouble() * .25) * (1.2f - h), r);
+        }
+        return SaveCards(name, verts, norms, uvs, tris);
+    }
+
+    static void Card(List<Vector3> v, List<Vector3> n, List<Vector2> uv, List<int> t, Vector3 c, Vector3 nrm, float size, System.Random r)
+    {
+        Vector3 tilt = (nrm + new Vector3((float)r.NextDouble() - .5f, (float)r.NextDouble() - .5f, (float)r.NextDouble() - .5f) * .9f).normalized;
+        Quaternion q = Quaternion.LookRotation(tilt) * Quaternion.Euler(0, 0, (float)r.NextDouble() * 360);
+        Vector3 ax = q * Vector3.right * size, ay = q * Vector3.up * size;
+        int b = v.Count;
+        v.Add(c - ax - ay); v.Add(c + ax - ay); v.Add(c + ax + ay); v.Add(c - ax + ay);
+        for (int k = 0; k < 4; k++) n.Add(nrm);
+        uv.Add(new Vector2(0, 0)); uv.Add(new Vector2(1, 0)); uv.Add(new Vector2(1, 1)); uv.Add(new Vector2(0, 1));
+        t.AddRange(new[] { b, b + 2, b + 1, b, b + 3, b + 2 });
+    }
+
+    static Mesh SaveCards(string name, List<Vector3> v, List<Vector3> n, List<Vector2> uv, List<int> t)
+    {
+        string path = $"{AssetDir}/Meshes/{name}.asset";
+        var m = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+        bool isNew = m == null;
+        if (isNew) m = new Mesh { name = name }; else m.Clear();
+        m.SetVertices(v); m.SetNormals(n); m.SetUVs(0, uv); m.SetTriangles(t, 0); m.RecalculateBounds(); m.RecalculateTangents();
+        if (isNew) AssetDatabase.CreateAsset(m, path); else EditorUtility.SetDirty(m);
+        return m;
+    }
+
     static void BuildPathTrees()
     {
         var g = Group("길가 나무 (길 위를 덮어 초반을 어둡게)");
@@ -555,29 +779,71 @@ public class GilchadaForest : MonoBehaviour
     {
         const string name = "빛줄기원뿔";
         if (meshes.TryGetValue(name, out var cached)) return cached;
-        var tris = new List<Vector3>();
-        const int sides = 10;
+        var v = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
+        const int sides = 16;
+        for (int k = 0; k <= sides; k++)
+        {
+            float a = Mathf.PI * 2 * k / sides;
+            v.Add(new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a))); uv.Add(new Vector2((float)k / sides, 0));
+            v.Add(new Vector3(Mathf.Cos(a) * .25f, 1, Mathf.Sin(a) * .25f)); uv.Add(new Vector2((float)k / sides, 1));
+        }
         for (int k = 0; k < sides; k++)
         {
-            float a0 = Mathf.PI * 2 * k / sides, a1 = Mathf.PI * 2 * (k + 1) / sides;
-            Vector3 b0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)), b1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
-            Vector3 t0 = new Vector3(Mathf.Cos(a0) * .25f, 1, Mathf.Sin(a0) * .25f), t1 = new Vector3(Mathf.Cos(a1) * .25f, 1, Mathf.Sin(a1) * .25f);
-            tris.AddRange(new[] { b0, t1, b1, b0, t0, t1 });
+            int b = k * 2;
+            t.AddRange(new[] { b, b + 3, b + 2, b, b + 1, b + 3 });
         }
-        var m = SaveMesh(name, Flat(tris));
+        var m = new Mesh();
+        m.SetVertices(v); m.SetUVs(0, uv); m.SetTriangles(t, 0); m.RecalculateNormals(); m.RecalculateBounds();
+        m = SaveMesh(name, m);
         meshes[name] = m;
         return m;
+    }
+
+    // 빛줄기 무늬: 아래·위로 사라지고, 결이 있는 옅은 빛
+    static Texture2D ShaftTexture()
+    {
+        string path = $"{AssetDir}/Textures/빛줄기.png";
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (tex) return tex;
+        EnsureFolder(AssetDir + "/Textures");
+        const int W = 128, Hh = 128;
+        var px = new Color32[W * Hh];
+        for (int y = 0; y < Hh; y++)
+            for (int x = 0; x < W; x++)
+            {
+                float vv = y / (Hh - 1f), uu = x / (W - 1f);
+                float fadeV = Mathf.SmoothStep(0, 1, vv / .25f) * Mathf.SmoothStep(0, 1, (1 - vv) / .45f);
+                float streak = .55f + .45f * Mathf.Sin(uu * Mathf.PI * 2 * 5 + Mathf.Sin(uu * 23) * 1.3f);
+                byte a = (byte)(Mathf.Clamp01(fadeV * streak) * 255);
+                px[y * W + x] = new Color32(255, 255, 255, a);
+            }
+        var t2 = new Texture2D(W, Hh, TextureFormat.RGBA32, false);
+        t2.SetPixels32(px); t2.Apply();
+        System.IO.File.WriteAllBytes(path, t2.EncodeToPNG());
+        Object.DestroyImmediate(t2);
+        AssetDatabase.ImportAsset(path);
+        var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+        imp.alphaIsTransparency = true; imp.wrapModeU = TextureWrapMode.Repeat; imp.wrapModeV = TextureWrapMode.Clamp;
+        imp.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
     }
 
     static Material ShaftMaterial()
     {
         string path = $"{AssetDir}/Materials/햇살 빛줄기.mat";
         var m = AssetDatabase.LoadAssetAtPath<Material>(path);
-        if (m) return m;
-        var sh = Shader.Find("Universal Render Pipeline/Unlit");
-        if (sh == null) sh = Shader.Find("Unlit/Transparent");
-        m = new Material(sh);
-        var c = Hex("#ffdf9a"); c.a = .07f;
+        bool isNew = m == null;
+        if (isNew)
+        {
+            var sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Unlit/Transparent");
+            m = new Material(sh);
+        }
+        else Undo.RecordObject(m, "빛줄기");
+        var tex = ShaftTexture();
+        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
+        if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+        var c = Hex("#ffe6b0"); c.a = .035f;
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
         if (m.HasProperty("_Color")) m.SetColor("_Color", c);
         if (m.HasProperty("_Surface"))
@@ -591,8 +857,135 @@ public class GilchadaForest : MonoBehaviour
             m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             m.renderQueue = 3000;
         }
-        AssetDatabase.CreateAsset(m, path);
+        if (isNew) AssetDatabase.CreateAsset(m, path); else EditorUtility.SetDirty(m);
         return m;
+    }
+
+    // ───────────────────────────── 다듬기 (빛줄기 줄이기 · 공터 나무 채우기 · 시작 부분 비우기)
+    public void ButtonPolish()
+    {
+        var ws = FindWordSpace(); if (ws == null) return;
+        var f = transform.Find(GroupName);
+        if (f == null) { EditorUtility.DisplayDialog("길차다 숲", "먼저 ① 숲 만들기를 눌러 주세요.", "확인"); return; }
+        Undo.SetCurrentGroupName("숲 다듬기");
+        int ug = Undo.GetCurrentGroup();
+        forest = f; HQ = highQuality; rng = new System.Random(31);
+        mats.Clear(); meshes.Clear();
+
+        // ① 빛줄기: 개수 줄이고 훨씬 투명하게, 위아래로 사라지게
+        meshes.Remove("빛줄기원뿔"); OpenCone(); ShaftMaterial();
+        void Thin(string group, int keep, float lightMul)
+        {
+            var g = f.Find(group); if (g == null) return;
+            int seen = 0; var del = new List<GameObject>();
+            foreach (Transform c in g)
+            {
+                if (c.name == "빛줄기") { if (++seen > keep) del.Add(c.gameObject); }
+                var l = c.GetComponent<Light>();
+                if (l && l.type == LightType.Spot && lightMul != 1) { Undo.RecordObject(l, "햇살"); l.intensity *= lightMul; }
+            }
+            foreach (var go in del) Undo.DestroyObjectImmediate(go);
+        }
+        Thin("숲길 햇살", 2, .7f);
+        Thin("세계수 햇살 (노란 빛)", 3, 1f);
+        var atmo = f.GetComponentInChildren<ForestAtmosphere>(true);
+        if (atmo) { Undo.RecordObject(atmo, "햇살"); atmo.warmLightMax = 5.5f; }
+
+        // ② 세계수 공터 둘레에서 비어 보이는 곳에 고목 채우기 (입구 쪽은 계속 비움)
+        var tall = f.Find("세계수 둘레 고목 숲");
+        if (tall == null) tall = Group("세계수 둘레 고목 숲");
+        var have = new List<Vector2>();
+        foreach (Transform c in tall) have.Add(new Vector2(c.localPosition.x, c.localPosition.z));
+        for (int deg = 0; deg < 360; deg += 12)
+        {
+            float a = deg * Mathf.Deg2Rad;
+            for (int ring = 0; ring < 2; ring++)
+            {
+                float r = ring == 0 ? R(23, 27) : R(30, 36);
+                float x = TREE.x + Mathf.Cos(a) * r, z = TREE.z + Mathf.Sin(a) * r;
+                if (z < TREE.z - 3 && Mathf.Abs(x - TREE.x) < (TREE.z - z) * 1.2f + 4) continue; // 입구 앞 시야
+                var p = new Vector2(x, z);
+                if (have.Any(h => (h - p).sqrMagnitude < 8.5f * 8.5f)) continue;
+                int before = tall.childCount;
+                TallTree(tall, x, z, R(.85f, 1.2f));
+                for (int k = before; k < tall.childCount; k++) Undo.RegisterCreatedObjectUndo(tall.GetChild(k).gameObject, "고목");
+                have.Add(p);
+            }
+        }
+
+        // ③ 시작 부분: 글자가 나타나는 앞쪽 덤불·나무 치우기
+        foreach (var n in new[] { WallName, "길가 나무 (길 위를 덮어 초반을 어둡게)", "고사리 · 돌 · 버섯" })
+        {
+            var g = f.Find(n); if (g == null) continue;
+            var del = new List<GameObject>();
+            foreach (Transform c in g)
+            {
+                Vector3 lp = c.localPosition;
+                if (lp.z < 4 && Mathf.Abs(lp.x - PathX(lp.z)) < 10) del.Add(c.gameObject);
+            }
+            foreach (var go in del) Undo.DestroyObjectImmediate(go);
+        }
+
+        // 새로 만든 고목에도 잎 카드
+        AddLeafCards(tall);
+        AssetDatabase.SaveAssets();
+        Undo.CollapseUndoOperations(ug);
+        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Debug.Log("[길차다 숲] 다듬기 완료: 빛줄기 줄임 · 공터 고목 채움 · 시작 부분 비움");
+    }
+
+    // ───────────────────────────── 시작 숲길 다시 채우기 + 하늘 열림 타이밍
+    public void ButtonStartForest()
+    {
+        var ws = FindWordSpace(); if (ws == null) return;
+        var f = transform.Find(GroupName);
+        if (f == null) { EditorUtility.DisplayDialog("길차다 숲", "먼저 ① 숲 만들기를 눌러 주세요.", "확인"); return; }
+        Undo.SetCurrentGroupName("시작 숲길");
+        int ug = Undo.GetCurrentGroup();
+        forest = f; HQ = highQuality; rng = new System.Random(41);
+        mats.Clear(); meshes.Clear();
+
+        var old = f.Find("시작 숲길");
+        if (old) Undo.DestroyObjectImmediate(old.gameObject);
+        var g = Group("시작 숲길");
+        Undo.RegisterCreatedObjectUndo(g.gameObject, "시작 숲길");
+        // 글자가 뜨는 자리(z -16 ~ -6, 길 가운데 ±4m)는 비우고, 그 바깥은 숲길처럼 촘촘하게
+        for (float z = -22; z < 6; z += R(2.6f, 3.6f))
+            foreach (int side in new[] { -1, 1 })
+            {
+                float px = PathX(z);
+                bool glyphZone = z > -17 && z < -5;
+                // 길가 나무: 줄기는 가늘고 잎은 높아서 글자를 가리지 않음
+                Broadleaf(g, px + side * R(glyphZone ? 5.2f : 4.5f, glyphZone ? 6.5f : 6f), z + R(-.8f, .8f), R(1.05f, 1.35f), -side);
+                // 덤불: 글자 자리 옆은 조금 바깥으로
+                Bush(g, px + side * R(glyphZone ? 6.8f : 3.8f, glyphZone ? 8.5f : 5.8f), z + R(-1, 1), R(.8f, 1.2f));
+                if (rng.NextDouble() < .5) TallTree(g, px + side * R(10, 16), z, R(.5f, .7f));
+            }
+        // 고사리는 낮아서 길 가까이도 괜찮음
+        var f1 = Mat("고사리", "#2f6b4c"); var f2 = Mat("고사리 밝은", "#3f8a52");
+        for (int i = 0; i < 40; i++)
+        {
+            float z = R(-22, 6); int side = rng.NextDouble() < .5 ? -1 : 1; float x = PathX(z) + side * R(2.4f, 5f);
+            var t = Child(g, "고사리 (흔들림)", new Vector3(x, H(x, z), z));
+            for (int k = 0; k < 5; k++)
+                Part(t, "잎", Frustum("원뿔4", 4, 1, 0), k % 2 == 1 ? f1 : f2, Vector3.zero,
+                     Quaternion.Euler(R(-40, 40), R(0, 360), R(-40, 40)), new Vector3(.22f, R(.8f, 1.6f), .22f), false);
+            Sway(t, 7f, R(1.4f, 2f));
+        }
+        AddLeafCards(g);
+
+        // 하늘이 열리는 타이밍: 입구 연출이 시작될 때 (걸어서 더 들어가야 밝아지던 것 수정)
+        var atmo = f.GetComponentInChildren<ForestAtmosphere>(true);
+        if (atmo)
+        {
+            Undo.RecordObject(atmo, "분위기");
+            atmo.darkUntilZ = 84f; atmo.lightFromZ = 96f;   // 연출 없이 걸어 들어와도 결국 밝아짐
+            atmo.revealSeconds = 4f; atmo.revealResetZ = 70f;
+        }
+        AssetDatabase.SaveAssets();
+        Undo.CollapseUndoOperations(ug);
+        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Debug.Log("[길차다 숲] 시작 숲길을 다시 채우고, 하늘이 열리는 타이밍을 입구 연출에 맞췄어요.");
     }
 
     // ───────────────────────────── 반딧불
@@ -870,27 +1263,27 @@ public class GilchadaForest : MonoBehaviour
         {
             profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, path);
-
-            var bloom = profile.Add<Bloom>(true);
-            bloom.threshold.Override(.9f); bloom.intensity.Override(1.1f); bloom.scatter.Override(.72f);
-            bloom.tint.Override(new Color(.92f, 1f, .97f));
-            AssetDatabase.AddObjectToAsset(bloom, profile);
-
-            var tone = profile.Add<Tonemapping>(true);
-            tone.mode.Override(TonemappingMode.ACES);
-            AssetDatabase.AddObjectToAsset(tone, profile);
-
-            var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.Override(.35f); color.contrast.Override(10f); color.saturation.Override(8f);
-            AssetDatabase.AddObjectToAsset(color, profile);
-
-            var vig = profile.Add<Vignette>(true);
-            vig.intensity.Override(.28f); vig.smoothness.Override(.45f); vig.color.Override(new Color(.02f, .06f, .07f));
-            AssetDatabase.AddObjectToAsset(vig, profile);
-
-            EditorUtility.SetDirty(profile);
-            AssetDatabase.SaveAssets();
         }
+        T Get<T>() where T : VolumeComponent
+        {
+            if (profile.TryGet(out T c)) return c;
+            c = profile.Add<T>(true);
+            AssetDatabase.AddObjectToAsset(c, profile);
+            return c;
+        }
+        // 아침 숲: 어둡게 누르지 않고, 은은한 빛 번짐 + 살짝 따뜻한 색
+        var bloom = Get<Bloom>();
+        bloom.threshold.Override(1.05f); bloom.intensity.Override(.7f); bloom.scatter.Override(.75f); bloom.tint.Override(Color.white);
+        var tone = Get<Tonemapping>();
+        tone.mode.Override(TonemappingMode.Neutral);
+        var color = Get<ColorAdjustments>();
+        color.postExposure.Override(.25f); color.contrast.Override(6f); color.saturation.Override(4f);
+        var wb = Get<WhiteBalance>();
+        wb.temperature.Override(6f); wb.tint.Override(-4f);
+        var vig = Get<Vignette>();
+        vig.intensity.Override(.32f); vig.smoothness.Override(.5f); vig.color.Override(new Color(.03f, .07f, .05f));
+        EditorUtility.SetDirty(profile);
+        AssetDatabase.SaveAssets();
 
         var t = owner.Find(PostName);
         Volume vol;
@@ -920,6 +1313,83 @@ public class GilchadaForest : MonoBehaviour
         }
     }
 
+    // 아침 숲: 무성한 잎 그늘 + 아주 옅은 안개 + 청록 발광
+    static void ApplyMorningLook(Transform owner)
+    {
+        var atmo = owner.GetComponentInChildren<ForestAtmosphere>(true);
+        if (atmo)
+        {
+            Undo.RecordObject(atmo, "아침 숲");
+            // 숲길: 잎 그늘로 주변은 어둡게 가라앉고, 길에 떨어지는 햇살로 시선이 모이게
+            // 공터로 나서는 순간 확 바뀌도록 바뀌는 구간을 짧게 (공터 가장자리 z≈86)
+            atmo.darkUntilZ = 84f; atmo.lightFromZ = 96f;
+            atmo.fogDark = Hex("#1b2b24"); atmo.fogLight = Hex("#bcd8d0");
+            atmo.densityDark = .026f; atmo.densityLight = .011f;
+            atmo.ambientSky = Hex("#9cc2ae"); atmo.ambientEquator = Hex("#3f5d4a"); atmo.ambientGround = Hex("#1f2a1c");
+            atmo.ambientDark = .4f; atmo.ambientLight = 1.3f;
+            atmo.sunDark = 1.2f; atmo.sunLight = 1.9f;
+            atmo.treeLightMax = 2f; atmo.spiritLightMax = 1.6f; atmo.warmLightMax = 5.5f;
+            if (atmo.sun)
+            {
+                Undo.RecordObject(atmo.sun, "해"); Undo.RecordObject(atmo.sun.transform, "해");
+                atmo.sun.color = Hex("#fff0cc");
+                atmo.sun.shadows = LightShadows.Soft; atmo.sun.shadowStrength = .85f;
+                atmo.sun.transform.rotation = Quaternion.Euler(50, 150, 0);
+            }
+            atmo.Apply(0, 0);
+            EditorUtility.SetDirty(atmo);
+        }
+        // 땅은 어둡게, 숲길은 밝은 흙색 → 길이 눈에 들어옴
+        void Recolor(string name, string hex)
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>($"{AssetDir}/Materials/{name}.mat");
+            if (m == null) return;
+            Undo.RecordObject(m, "색");
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Hex(hex));
+            if (m.HasProperty("_Color")) m.SetColor("_Color", Hex(hex));
+            EditorUtility.SetDirty(m);
+        }
+        Recolor("땅", "#142219");
+        Recolor("숲길", "#6a5f45");
+
+        // 숲길에 떨어지는 햇살 (잎 사이로 내려오는 빛 웅덩이 + 옅은 빛줄기)
+        var f = owner.Find(GroupName);
+        if (f)
+        {
+            var old = f.Find("숲길 햇살");
+            if (old) Undo.DestroyObjectImmediate(old.gameObject);
+            var g = new GameObject("숲길 햇살").transform;
+            Undo.RegisterCreatedObjectUndo(g.gameObject, "숲길 햇살");
+            g.SetParent(f, false);
+            var shaft = ShaftMaterial();
+            foreach (float z in new[] { -8f, 17f, 33f, 48f, 60f, 71f })
+            {
+                var aim = new Vector3(PathX(z) + Random.Range(-.8f, .8f), H(PathX(z), z), z);
+                var from = aim + new Vector3(-7, 30, -9);
+                var lgo = new GameObject("햇살");
+                lgo.transform.SetParent(g, false);
+                lgo.transform.localPosition = from;
+                lgo.transform.localRotation = Quaternion.LookRotation(aim - from);
+                var l = lgo.AddComponent<Light>();
+                l.type = LightType.Spot; l.color = Hex("#ffe2a6"); l.intensity = 2.2f; l.range = 45;
+                l.spotAngle = 14; l.innerSpotAngle = 4; l.shadows = LightShadows.None;
+                if (z != 17f && z != 60f) continue; // 빛줄기는 두 군데만 (빛 웅덩이는 모두)
+                var cone = OpenCone();
+                Part(g, "빛줄기", cone, shaft, aim, Quaternion.FromToRotation(Vector3.up, (from - aim).normalized), new Vector3(2.4f, 30, 2.4f), false);
+            }
+        }
+
+        // 길가 버섯: 하얀 반짝이 → 차분한 청록빛
+        var fungus = AssetDatabase.LoadAssetAtPath<Material>($"{AssetDir}/Materials/빛나는 버섯.mat");
+        if (fungus)
+        {
+            Undo.RecordObject(fungus, "버섯");
+            if (fungus.HasProperty("_BaseColor")) fungus.SetColor("_BaseColor", Hex("#2f524c"));
+            if (fungus.HasProperty("_EmissionColor")) fungus.SetColor("_EmissionColor", Hex("#2ad4c4") * .7f);
+            EditorUtility.SetDirty(fungus);
+        }
+    }
+
     static Mesh SaveMesh(string name, Mesh m)
     {
         m.name = name;
@@ -932,6 +1402,7 @@ public class GilchadaForest : MonoBehaviour
             existing.SetVertices(m.vertices);
             existing.SetTriangles(m.triangles, 0);
             existing.SetNormals(m.normals);
+            if (m.uv != null && m.uv.Length == m.vertexCount) existing.SetUVs(0, m.uv);
             existing.RecalculateBounds();
             existing.name = name;
             EditorUtility.SetDirty(existing);
@@ -1031,6 +1502,9 @@ class GilchadaForestInspector : Editor
         EditorGUILayout.Space(4);
         if (GUILayout.Button("③ 세계수 공간만 다시 만들기", GUILayout.Height(28))) f.ButtonRebuildWorldTree();
         if (GUILayout.Button(f.highQuality ? "④ 고퀄 모드 적용 (부드러운 모양 + 빛 번짐)" : "④ 로우폴리로 되돌리기", GUILayout.Height(28))) f.ButtonHighQuality();
+        if (GUILayout.Button("⑤ 숲길 빽빽하게 + 나뭇잎 디테일 + 공터 대비", GUILayout.Height(28))) f.ButtonDetail();
+        if (GUILayout.Button("⑥ 다듬기 (빛줄기 줄이기 · 공터 나무 채우기 · 시작 부분 비우기)", GUILayout.Height(28))) f.ButtonPolish();
+        if (GUILayout.Button("⑦ 시작 숲길 채우기 + 하늘 열림 타이밍", GUILayout.Height(28))) f.ButtonStartForest();
         if (GUILayout.Button("카메라 경로만 다시 숲길로", GUILayout.Height(24))) f.ButtonCameraPath();
     }
 }
