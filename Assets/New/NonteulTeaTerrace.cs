@@ -8,6 +8,8 @@
 //   - 물 칸   → 돌담으로 쌓은 계단식 물논 + 모
 //   - 계단 끝선 풀, 자모 둑 가장자리 풀, 빈 땅 풀도 새로 심어요.
 //   - 자모(글자)는 건드리지 않아요. 계단은 자모에서 조금 떨어져서 올라가요.
+//   - [글자 자리 층층이 높이기] 자모마다 돌벽으로 쌓은 단 위에 올려요. 걷는 순서(ㄹ→ㄹ→ㅏ)대로
+//     점점 높아지고, 둘레 자모 단은 더 높아요 (최대 6.5m). 자모·ㄹ 길 장식·시작 지점도 같이 올라가요.
 //  만든 파일은 Assets/논틀밭틀_생성/다원 폴더에 저장돼요.
 // =====================================================================
 using System.Collections.Generic;
@@ -32,6 +34,15 @@ public class NonteulTeaTerrace : MonoBehaviour
     [Tooltip("물 칸 계단 벽을 돌담으로")] public bool stoneWalls = true;
     [Tooltip("풀 양 (컴퓨터가 느려지면 줄이세요)")] [Range(0.2f, 1.5f)] public float grassAmount = 1.0f;
 
+    [Header("글자 자리 층층이 높이기")]
+    [Tooltip("자모마다 서 있는 단을 층층이 높여요")] public bool raiseLetters = true;
+    [Tooltip("단 높이 배율 (1 = 가장 높은 단 6.5m)")] [Range(0.3f, 2f)] public float levelScale = 1f;
+
+    // 버튼이 채우는 값 (원래 위치로 되돌리기용)
+    [HideInInspector] public List<Transform> liftedShells = new List<Transform>();
+    [HideInInspector] public List<Vector3> shellOrigPos = new List<Vector3>();
+    [HideInInspector] public Transform liftedStart; [HideInInspector] public Vector3 startOrigPos;
+
     // ------------------------------------------------------------------
     const string FOLDER = "Assets/논틀밭틀_생성";
     const string SUB = "Assets/논틀밭틀_생성/고퀄";
@@ -50,9 +61,24 @@ public class NonteulTeaTerrace : MonoBehaviour
         {9f,-1f,90f,10f,8f,.6f,0},{9f,10f,90f,10f,8f,.6f,0},{-4.3f,11f,90f,6f,1f,.75f,0},{0f,.4f,0f,5f,11f,1f,1}};
     static readonly string JAMO = "ㄴㅗㄴㅌㅡㄹㅂㅏㅌㅌㅡㄹ";
 
-    class Plate { public float x0, x1, z0, z1; public bool water; public List<R2> near = new List<R2>(); }
+    class Plate { public float x0, x1, z0, z1, baseY; public bool water; public List<R2> near = new List<R2>(); }
     class R2 { public float cx, cz, hw, hd, yaw, top; public int j; }
     readonly List<Plate> plates = new List<Plate>();
+
+    // 글자 자리 단: 걷는 순서(ㄹ → ㄹ → ㅏ)대로 올라가고, 둘레 자모 단은 더 높게
+    struct Zone { public Rect r; public float L; public string name; public Zone(float x0, float x1, float z0, float z1, float l, string n) { r = Rect.MinMaxRect(x0, z0, x1, z1); L = l; name = n; } }
+    static readonly Zone[] ZONES = {
+        new Zone(-16.6f, -3.7f, -17.6f, 1.25f, 4.5f, "ㄴ 논 단"),
+        new Zone(-16.1f, -3.7f, 1.25f, 15.6f, 6.5f, "ㅂ·ㅡ 단"),
+        new Zone(-3.7f, 4.6f, -17.6f, -5.55f, 1.5f, "ㄹ 아래 단"),
+        new Zone(-3.7f, 4.6f, -5.55f, 6.45f, 3.0f, "ㄹ 위 단"),
+        new Zone(-3.7f, 4.6f, 6.45f, 21.6f, 4.0f, "가운데 논·ㅏ 단"),
+        new Zone(4.6f, 13.6f, 15.05f, 21.6f, 4.0f, "ㅏ 물논 단"),
+        new Zone(4.6f, 13.6f, -17.6f, -6.5f, 2.5f, "ㅌ 첫째 단"),
+        new Zone(4.6f, 13.6f, -6.5f, 4.5f, 4.5f, "ㅌ 둘째 단"),
+        new Zone(4.6f, 13.6f, 4.5f, 15.05f, 6.0f, "ㅌ 셋째 단") };
+    int ZoneIndex(float x, float z) { if (!raiseLetters) return -1; for (int i = 0; i < ZONES.Length; i++) if (ZONES[i].r.Contains(new Vector2(x, z))) return i; return -1; }
+    float ZoneLevel(float x, float z) { int i = ZoneIndex(x, z); return i < 0 ? 0f : ZONES[i].L * levelScale; }
     readonly List<R2> strokes = new List<R2>();
     System.Random rng;
 
@@ -72,7 +98,9 @@ public class NonteulTeaTerrace : MonoBehaviour
 
         Progress("차잎·돌담 질감 만드는 중…", 0.05f);
         MakeOwnMaterials();
+        LiftLetters();
         DefineLayout();
+        if (raiseLetters) BuildZoneBlocks(root);
 
         Progress("계단 땅 만드는 중…", 0.2f);
         var grids = new List<Grid>();
@@ -88,15 +116,17 @@ public class NonteulTeaTerrace : MonoBehaviour
         Progress("풀 심는 중…", 0.75f);
         BuildGrass(root, grids);
 
+        RaiseGlowRoute();
         Progress("저장하는 중…", 0.95f);
         SaveAll(); ClearProgress();
-        MarkDirty(gameObject);
+        MarkDirty(this); MarkDirty(gameObject);
         Debug.Log("[논틀밭틀 계단 다원] 다 만들었어요. Ctrl+S로 저장하고 플레이해 보세요.");
     }
 
     public void Remove()
     {
         var old = transform.Find(ROOT_NAME); if (old) DestroyNow(old.gameObject);
+        RestoreLetters();
         var hq = transform.Find(HQ_NAME);
         var pad = hq ? hq.Find(PADDY_NAME) : null;
         if (pad) foreach (Transform c in pad) { c.gameObject.SetActive(true); MarkDirty(c.gameObject); }
@@ -131,6 +161,143 @@ public class NonteulTeaTerrace : MonoBehaviour
     }
 
     // ==================================================================
+    //  글자 자리 층층이 높이기 (자모 껍데기·ㄹ 길 장식·시작 지점을 단 높이만큼 올려요)
+    // ==================================================================
+    const string VALLEY_ROOT = "논틀밭틀_녹차밭 골짜기 (자동 생성)";
+
+    void LiftLetters()
+    {
+        RestoreLetters();
+        if (!raiseLetters) return;
+        var up = transform.up;
+        var jr = FindJamoRoot();
+        if (jr != null)
+            foreach (var jp in jr.GetComponentsInChildren<Byeolmalsseum.JamoPiece>(true))
+            {
+                if (!MeasureBounds(jp.transform, out var wb)) continue;
+                var lc = transform.InverseTransformPoint(wb.center);
+                float L = ZoneLevel(lc.x, lc.z); if (L <= 0f) continue;
+#if UNITY_EDITOR
+                if (!Application.isPlaying) Undo.RecordObject(jp.transform, "글자 단 높이기");
+#endif
+                liftedShells.Add(jp.transform); shellOrigPos.Add(jp.transform.position);
+                jp.transform.position += up * L;
+                MarkDirty(jp.transform);
+            }
+        // ㄹ 꼬불길 장식 (녹차밭 골짜기 스크립트가 만든 것)
+        var v = transform.Find(VALLEY_ROOT);
+        if (v != null)
+            foreach (Transform c in v)
+            {
+                if (!c.name.StartsWith("ㄹ")) continue;
+                var rs = c.GetComponentsInChildren<Renderer>(true); if (rs.Length == 0) continue;
+                var b = rs[0].bounds; foreach (var r in rs) b.Encapsulate(r.bounds);
+                var lc = transform.InverseTransformPoint(b.center);
+                c.localPosition = new Vector3(0, ZoneLevel(lc.x, lc.z), 0); MarkDirty(c);
+            }
+        // 체험 시작 지점
+        var ws = FindFirstObjectByType<Byeolmalsseum.WordSpace>();
+        var sp = ws != null && ws.experienceCamera != null ? ws.experienceCamera.startPoint : null;
+        if (sp != null)
+        {
+            var a = transform.InverseTransformPoint(sp.position); var f = transform.InverseTransformDirection(sp.forward);
+            float L = Mathf.Max(ZoneLevel(a.x, a.z), ZoneLevel(a.x + f.x * 1.2f, a.z + f.z * 1.2f));
+            if (L > 0f)
+            {
+#if UNITY_EDITOR
+                if (!Application.isPlaying) Undo.RecordObject(sp, "시작 지점 높이기");
+#endif
+                liftedStart = sp; startOrigPos = sp.position; sp.position += up * L; MarkDirty(sp);
+            }
+        }
+    }
+
+    void RestoreLetters()
+    {
+        for (int i = 0; i < liftedShells.Count && i < shellOrigPos.Count; i++)
+        {
+            var t = liftedShells[i]; if (t == null) continue;
+#if UNITY_EDITOR
+            if (!Application.isPlaying) Undo.RecordObject(t, "글자 단 되돌리기");
+#endif
+            t.position = shellOrigPos[i]; MarkDirty(t);
+        }
+        liftedShells.Clear(); shellOrigPos.Clear();
+        if (liftedStart != null) { liftedStart.position = startOrigPos; MarkDirty(liftedStart); liftedStart = null; }
+        var v = transform.Find(VALLEY_ROOT);
+        if (v != null) foreach (Transform c in v) if (c.name.StartsWith("ㄹ")) { c.localPosition = Vector3.zero; MarkDirty(c); }
+    }
+
+    bool NearZoneEdge(float x, float z, float m)
+    {
+        float L = ZoneLevel(x, z);
+        return !Mathf.Approximately(ZoneLevel(x + m, z), L) || !Mathf.Approximately(ZoneLevel(x - m, z), L)
+            || !Mathf.Approximately(ZoneLevel(x, z + m), L) || !Mathf.Approximately(ZoneLevel(x, z - m), L);
+    }
+
+    // 단 덩어리: 윗면(풀) + 돌로 쌓은 옆벽 + 모서리 풀
+    void BuildZoneBlocks(Transform root)
+    {
+        var top = new MB(1); var wall = new MB(1); var grass = new MB(1);
+        foreach (var Z in ZONES)
+        {
+            float L = Z.L * levelScale; var r = Z.r;
+            int k = top.v.Count;
+            top.Add(new Vector3(r.xMin, L, r.yMin), Vector3.up, new Vector2(r.xMin, r.yMin)); top.Add(new Vector3(r.xMax, L, r.yMin), Vector3.up, new Vector2(r.xMax, r.yMin));
+            top.Add(new Vector3(r.xMax, L, r.yMax), Vector3.up, new Vector2(r.xMax, r.yMax)); top.Add(new Vector3(r.xMin, L, r.yMax), Vector3.up, new Vector2(r.xMin, r.yMax));
+            top.Tri(0, k, k + 2, k + 1); top.Tri(0, k, k + 3, k + 2);
+            var edges = new[] {
+                (new Vector2(r.xMin, r.yMin), new Vector2(r.xMax, r.yMin), new Vector2(0, -1)),
+                (new Vector2(r.xMax, r.yMin), new Vector2(r.xMax, r.yMax), new Vector2(1, 0)),
+                (new Vector2(r.xMax, r.yMax), new Vector2(r.xMin, r.yMax), new Vector2(0, 1)),
+                (new Vector2(r.xMin, r.yMax), new Vector2(r.xMin, r.yMin), new Vector2(-1, 0)) };
+            foreach (var e in edges)
+            {
+                Vector2 a = e.Item1, b = e.Item2, o = e.Item3; float len = Vector2.Distance(a, b);
+                int n = Mathf.Max(1, Mathf.CeilToInt(len / 0.5f));
+                var nrm = new Vector3(o.x, 0, o.y);
+                for (int i = 0; i < n; i++)
+                {
+                    var p0 = Vector2.Lerp(a, b, i / (float)n); var p1 = Vector2.Lerp(a, b, (i + 1) / (float)n); var mid = (p0 + p1) * 0.5f;
+                    float low = ZoneLevel(mid.x + o.x * 0.05f, mid.y + o.y * 0.05f);
+                    if (low >= L - 0.01f) continue;
+                    float u0 = Vector2.Distance(a, p0), u1 = u0 + Vector2.Distance(p0, p1);
+                    int q = wall.v.Count;
+                    wall.Add(new Vector3(p0.x, low - 0.02f, p0.y), nrm, new Vector2(u0, low)); wall.Add(new Vector3(p1.x, low - 0.02f, p1.y), nrm, new Vector2(u1, low));
+                    wall.Add(new Vector3(p1.x, L, p1.y), nrm, new Vector2(u1, L)); wall.Add(new Vector3(p0.x, L, p0.y), nrm, new Vector2(u0, L));
+                    wall.Tri(0, q, q + 1, q + 2); wall.Tri(0, q, q + 2, q + 3);
+                    // 위 모서리에 늘어진 풀, 아래 밑동 풀
+                    for (int g = 0; g < 2; g++)
+                    {
+                        var pt = Vector2.Lerp(p0, p1, R(0f, 1f));
+                        if (rng.NextDouble() < 0.85 * grassAmount) Ribbons(grass, new Vector3(pt.x - o.x * 0.06f, L - 0.02f, pt.y - o.y * 0.06f), R(0.25f, 0.5f), 6, 0.15f, 1.2f, 0.022f);
+                        if (rng.NextDouble() < 0.6 * grassAmount) Ribbons(grass, new Vector3(pt.x + o.x * 0.1f, low + LIFT, pt.y + o.y * 0.1f), R(0.3f, 0.6f), 7, 0.2f, 0.5f, 0.024f);
+                    }
+                }
+            }
+        }
+        var holder = new GameObject("글자 단 (층층이)").transform; holder.SetParent(root, false);
+        Emit(holder, "단 윗면", top, new[] { mGrass }, ShadowCastingMode.On, true);
+        Emit(holder, "단 돌벽", wall, new[] { mStone != null ? mStone : mPath }, ShadowCastingMode.On, true);
+        Emit(holder, "단 모서리 풀", grass, new[] { mBladeGrass }, ShadowCastingMode.Off, false, false);
+    }
+
+    // 빛가루 길이 단 속에 묻히지 않게 단 높이만큼 올려요
+    void RaiseGlowRoute()
+    {
+        if (!raiseLetters) return;
+        var wp = GetComponent("NonteulWindingPath"); if (wp == null) return;
+        var f = wp.GetType().GetField("glowRoute", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        var list = f != null ? f.GetValue(wp) as List<Vector3> : null; if (list == null) return;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var lp = transform.InverseTransformPoint(list[i]); float L = ZoneLevel(lp.x, lp.z);
+            if (L > 0f && lp.y < L + 0.7f) { lp.y = L + 1.0f; list[i] = transform.TransformPoint(lp); }
+        }
+        MarkDirty(wp);
+    }
+
+    // ==================================================================
     //  배치 (논 칸 · 자모 획)
     // ==================================================================
     void DefineLayout()
@@ -145,6 +312,14 @@ public class NonteulTeaTerrace : MonoBehaviour
         float[] zc = { -12f, -1f, 10f };
         for (int k = 0; k < 3; k++) { P(5.2f, 9f, zc[k] - 4.8f, zc[k] + 4.8f, k != 1); P(9f, 12.8f, zc[k] - 4.8f, zc[k] + 4.8f, k == 1); }
 
+        foreach (var p in plates)
+        {
+            int zi = ZoneIndex((p.x0 + p.x1) / 2, (p.z0 + p.z1) / 2);
+            if (zi < 0) continue;
+            var zr = ZONES[zi].r;
+            p.x0 = Mathf.Max(p.x0, zr.xMin); p.x1 = Mathf.Min(p.x1, zr.xMax); p.z0 = Mathf.Max(p.z0, zr.yMin); p.z1 = Mathf.Min(p.z1, zr.yMax);
+            p.baseY = ZONES[zi].L * levelScale;
+        }
         float[] tops = MeasureJamoTops();
         for (int j = 0; j < 12; j++)
         {
@@ -301,7 +476,7 @@ public class NonteulTeaTerrace : MonoBehaviour
                     float hl = g.h[iz * g.nx + Mathf.Max(ix - 1, 0)], hr = g.h[iz * g.nx + Mathf.Min(ix + 1, g.nx - 1)];
                     float hd = g.h[Mathf.Max(iz - 1, 0) * g.nx + ix], hu = g.h[Mathf.Min(iz + 1, g.nz - 1) * g.nx + ix];
                     var n = new Vector3(-(hr - hl) / (2 * g.dx), 1f, -(hu - hd) / (2 * g.dz)).normalized;
-                    mb.Add(new Vector3(x, g.h[iz * g.nx + ix] + LIFT, z), n, new Vector2(x, z));
+                    mb.Add(new Vector3(x, g.h[iz * g.nx + ix] + LIFT + g.p.baseY, z), n, new Vector2(x, z));
                 }
             int wallSub = g.p.water ? 3 : 1, flatSub = g.p.water ? 2 : 0;
             for (int iz = 0; iz < g.nz - 1; iz++)
@@ -341,7 +516,7 @@ public class NonteulTeaTerrace : MonoBehaviour
                 float tread = stepWidth * (1f - RISER);
                 float rH = Mathf.Min(0.46f, tread * 0.48f) * hedgeSize * R(0.9f, 1.1f);
                 float rV = 0.38f * hedgeSize * R(0.85f, 1.15f);
-                float y = Height(L) + LIFT;
+                float y = Height(L) + LIFT + g.p.baseY;
                 float patch = Fbm(x * 0.22f + 11f, z * 0.22f - 5f);
                 int sub = patch < 0.42f ? 0 : (patch < 0.58f ? 1 : 2);
                 if (rng.NextDouble() < 0.18) sub = rng.Next(3);
@@ -437,7 +612,7 @@ public class NonteulTeaTerrace : MonoBehaviour
                     int a = iz * g.nx + ix;
                     int t0 = TreadLevel(g.d[a], 0.02f), t1 = TreadLevel(g.d[a + 1], 0.02f), t2 = TreadLevel(g.d[a + g.nx], 0.02f), t3 = TreadLevel(g.d[a + g.nx + 1], 0.02f);
                     if (t0 < 1 || t0 != t1 || t0 != t2 || t0 != t3) continue;
-                    float y = stepHeight * t0 + LIFT + 0.035f;
+                    float y = stepHeight * t0 + LIFT + 0.035f + g.p.baseY;
                     float x = g.p.x0 + ix * g.dx, z = g.p.z0 + iz * g.dz;
                     var A = new Vector3(x, y, z); var B = new Vector3(x + g.dx, y, z); var C = new Vector3(x, y, z + g.dz); var D = new Vector3(x + g.dx, y, z + g.dz);
                     int k = wmb.v.Count;
@@ -453,7 +628,7 @@ public class NonteulTeaTerrace : MonoBehaviour
                     float X = x + R(-0.03f, 0.03f), Z = z + R(-0.03f, 0.03f);
                     int t = TreadLevel(Dist(g.p, X, Z), 0.1f); if (t < 1) continue;
                     if (rng.NextDouble() < 0.1) continue;
-                    Ribbons(seed, new Vector3(X, stepHeight * t + LIFT, Z), R(0.2f, 0.32f), 5, 0.05f, 0.25f, 0.012f);
+                    Ribbons(seed, new Vector3(X, stepHeight * t + LIFT + g.p.baseY, Z), R(0.2f, 0.32f), 5, 0.05f, 0.25f, 0.012f);
                 }
         }
         Emit(root, "계단 물논", wmb, new[] { mWater }, ShadowCastingMode.Off, false);
@@ -472,11 +647,11 @@ public class NonteulTeaTerrace : MonoBehaviour
         {
             var pts = RowPoints(g, i => i < maxTiers ? stepWidth * (i + RISER) + 0.03f : float.MaxValue, 0.42f / Mathf.Max(0.3f, amt));
             foreach (var p in pts)
-                Ribbons(grass, new Vector3(p.x, Height(p.z) + LIFT - 0.02f, p.y), R(0.22f, 0.42f), 6, 0.2f, 0.75f, 0.022f);
+                Ribbons(grass, new Vector3(p.x, Height(p.z) + LIFT - 0.02f + g.p.baseY, p.y), R(0.22f, 0.42f), 6, 0.2f, 0.75f, 0.022f);
             // 계단 아래쪽(자모 옆) 풀
             var foot = RowPoints(g, i => i == 0 ? 0.12f : float.MaxValue, 0.38f / Mathf.Max(0.3f, amt));
             foreach (var p in foot)
-                Ribbons(grass, new Vector3(p.x, Height(p.z) + LIFT, p.y), R(0.3f, 0.55f), 7, 0.2f, 0.5f, 0.024f);
+                Ribbons(grass, new Vector3(p.x, Height(p.z) + LIFT + g.p.baseY, p.y), R(0.3f, 0.55f), 7, 0.2f, 0.5f, 0.024f);
         }
         // 자모 둑 둘레: 아래쪽과 윗모서리
         foreach (var r in strokes)
@@ -498,16 +673,16 @@ public class NonteulTeaTerrace : MonoBehaviour
         for (int i = 0, placed = 0; i < 40000 && placed < want; i++)
         {
             float X = R(-24, 24), Z = R(-24, 26);
-            if (InPlate(X, Z, 0.1f) || InStroke(X, Z, 0.15f)) continue;
-            Ribbons(grass, new Vector3(X, LIFT, Z), R(0.25f, 0.55f), 8, 0.22f, 0.5f, 0.024f); placed++;
+            if (InPlate(X, Z, 0.1f) || InStroke(X, Z, 0.15f) || NearZoneEdge(X, Z, 0.25f)) continue;
+            Ribbons(grass, new Vector3(X, LIFT + ZoneLevel(X, Z), Z), R(0.25f, 0.55f), 8, 0.22f, 0.5f, 0.024f); placed++;
         }
         Emit(root, "풀", grass, new[] { mBladeGrass }, ShadowCastingMode.Off, false, false);
     }
 
     float GroundAt(float x, float z)
     {
-        foreach (var p in plates) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return Height(Dist(p, x, z)) + LIFT;
-        return LIFT;
+        foreach (var p in plates) if (x > p.x0 && x < p.x1 && z > p.z0 && z < p.z1) return Height(Dist(p, x, z)) + LIFT + p.baseY;
+        return LIFT + ZoneLevel(x, z);
     }
     bool InStroke(float x, float z, float pad) { foreach (var r in strokes) if (RectSdf(r, x, z) < pad) return true; return false; }
     bool InPlate(float x, float z, float pad) { foreach (var p in plates) if (x >= p.x0 - pad && x <= p.x1 + pad && z >= p.z0 - pad && z <= p.z1 + pad) return true; return false; }
@@ -555,7 +730,6 @@ public class NonteulTeaTerrace : MonoBehaviour
         var teaN = GetTex("차잎_노멀", true, () => NormalFrom(TeaHeight(256), 256, 5f, "차잎_노멀"));
         Color[] tints = { new Color(1f, 1f, 1f), new Color(0.86f, 0.95f, 0.82f), new Color(1.08f, 1.05f, 0.88f) };
         for (int i = 0; i < 3; i++) mTea[i] = GetMat("다원_차잎_" + (char)('A' + i), tints[i], teaTex, teaN, 0.42f, 1f, Vector2.one);
-        if (stoneWalls)
         {
             var stTex = GetTex("돌담_색", false, MakeStoneAlbedo);
             var stN = GetTex("돌담_노멀", true, () => NormalFrom(StoneHeight(512), 512, 8f, "돌담_노멀"));
@@ -738,6 +912,12 @@ public class NonteulTeaTerrace : MonoBehaviour
         public readonly List<Vector3> v = new List<Vector3>(), n = new List<Vector3>(); public readonly List<Vector2> uv = new List<Vector2>(); public readonly List<int>[] sub;
         public MB(int subs) { sub = new List<int>[subs]; for (int i = 0; i < subs; i++) sub[i] = new List<int>(); }
         public void Add(Vector3 p, Vector3 nrm, Vector2 u) { v.Add(p); n.Add(nrm); uv.Add(u); }
+        public void Tri(int s, int a, int b, int c)
+        {
+            var face = Vector3.Cross(v[b] - v[a], v[c] - v[a]);
+            if (Vector3.Dot(face, n[a] + n[b] + n[c]) >= 0) { sub[s].Add(a); sub[s].Add(b); sub[s].Add(c); }
+            else { sub[s].Add(a); sub[s].Add(c); sub[s].Add(b); }
+        }
         public Mesh ToMesh(string name, bool tangents)
         {
             var m = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };
