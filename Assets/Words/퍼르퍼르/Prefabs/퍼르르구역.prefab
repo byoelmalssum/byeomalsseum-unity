@@ -51,7 +51,7 @@ MonoBehaviour:
   pileCount: 250
   regrowSeconds: 8
   burst: {fileID: 0}
-  burstCount: 250
+  burstCount: 200
   windBoost: 18
   boostSeconds: 2.5
   sound: {fileID: 0}
