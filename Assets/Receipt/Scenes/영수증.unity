@@ -588,27 +588,29 @@ MonoBehaviour:
   requiredCount: 3
   maxChars: 30
   resetAfterSeconds: 60
+  showWordGlow: 1
+  wordGlowAlpha: 0.12
   feelings:
   - name: "\uC124\uB818"
-    color: {r: 1, g: 0.56078434, b: 0.69411767, a: 1}
-  - name: "\uB530\uB73B\uD568"
-    color: {r: 1, g: 0.6901961, b: 0.4, a: 1}
-  - name: "\uD3EC\uADFC\uD568"
-    color: {r: 1, g: 0.8235294, b: 0.47843137, a: 1}
-  - name: "\uC0DD\uB3D9\uAC10"
-    color: {r: 0.60784316, g: 0.8784314, b: 0.47843137, a: 1}
-  - name: "\uC2E0\uBE44\uB85C\uC6C0"
-    color: {r: 0.7529412, g: 0.54901963, b: 1, a: 1}
-  - name: "\uACE0\uC694\uD568"
-    color: {r: 0.43137255, g: 0.5921569, b: 1, a: 1}
-  - name: "\uADF8\uB9AC\uC6C0"
-    color: {r: 0.5529412, g: 0.72156864, b: 0.9411765, a: 1}
-  - name: "\uC544\uB828\uD568"
-    color: {r: 0.90588236, g: 0.6509804, b: 0.8392157, a: 1}
+    color: {r: 0.9607843, g: 0.56078434, b: 0.69411767, a: 1}
+  - name: "\uAC00\uBCBC\uC6C0"
+    color: {r: 0.7490196, g: 0.8901961, b: 0.96862745, a: 1}
+  - name: "\uC11C\uB298\uD568"
+    color: {r: 0.49803922, g: 0.65882355, b: 0.9098039, a: 1}
   - name: "\uC4F8\uC4F8\uD568"
-    color: {r: 0.6627451, g: 0.60784316, b: 0.8784314, a: 1}
-  - name: "\uB0AF\uC126"
-    color: {r: 0.37254903, g: 0.8392157, b: 0.7529412, a: 1}
+    color: {r: 0.60784316, g: 0.56078434, b: 0.8509804, a: 1}
+  - name: "\uD48D\uC131\uD568"
+    color: {r: 0.9607843, g: 0.6901961, b: 0.2901961, a: 1}
+  - name: "\uB0A0\uCE74\uB85C\uC6C0"
+    color: {r: 0.37254903, g: 0.8156863, b: 0.8627451, a: 1}
+  - name: "\uC815\uACA8\uC6C0"
+    color: {r: 0.9490196, g: 0.627451, b: 0.48235294, a: 1}
+  - name: "\uC0DD\uB3D9\uAC10"
+    color: {r: 0.56078434, g: 0.85882354, b: 0.43529412, a: 1}
+  - name: "\uC544\uB291\uD568"
+    color: {r: 0.9098039, g: 0.7607843, b: 0.47843137, a: 1}
+  - name: "\uACE0\uC694\uD568"
+    color: {r: 0.43137255, g: 0.49803922, b: 0.8784314, a: 1}
 --- !u!4 &1700004434
 Transform:
   m_ObjectHideFlags: 0
