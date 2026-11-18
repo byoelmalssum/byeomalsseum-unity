@@ -23,8 +23,15 @@ public class PeureuWind : MonoBehaviour
     [Tooltip("천이 제각각 파르르 떨리는 정도 (0~1)")]
     [Range(0f, 1f)] public float flutter = 0.6f;
 
+    /// <summary>지금 부는 바람 세기 (기본 + 강약 + 돌풍). 풍경(리본·바람개비·풀)이 읽어 감</summary>
+    public float CurrentStrength { get; private set; }
+    /// <summary>바람 방향 (길이 1)</summary>
+    public Vector3 Direction => direction.sqrMagnitude > 0f ? direction.normalized : Vector3.right;
+    /// <summary>바람 세기를 0~1쯤으로 (보통 0.5~1.4, 돌풍 때 2 이상)</summary>
+    public float Amount => CurrentStrength / Mathf.Max(0.01f, strength + gustStrength * 0.5f);
+
     Cloth[] cloths;
-    float[] gains;        // 천마다 바람 배수 (WindGain이 붙은 부모가 있으면 그 값)
+    float[] gains;       // 천마다 바람 배수 (WindGain이 붙은 부모가 있으면 그 값)
     float boost;          // 지금 더해지는 돌풍 세기
     float boostEndTime;
     float boostPeak;
@@ -69,6 +76,7 @@ public class PeureuWind : MonoBehaviour
 
         float gust = Mathf.PerlinNoise(Time.time * gustSpeed, 0.37f) * gustStrength;
         float s = strength + gust + boost;
+        CurrentStrength = s;
         Vector3 dir = direction.sqrMagnitude > 0f ? direction.normalized : Vector3.right;
 
         if (cloths == null) return;
