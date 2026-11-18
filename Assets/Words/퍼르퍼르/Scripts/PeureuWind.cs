@@ -24,6 +24,7 @@ public class PeureuWind : MonoBehaviour
     [Range(0f, 1f)] public float flutter = 0.6f;
 
     Cloth[] cloths;
+    float[] gains;        // 천마다 바람 배수 (WindGain이 붙은 부모가 있으면 그 값)
     float boost;          // 지금 더해지는 돌풍 세기
     float boostEndTime;
     float boostPeak;
@@ -44,6 +45,12 @@ public class PeureuWind : MonoBehaviour
     public void Refresh()
     {
         cloths = GetComponentsInChildren<Cloth>(true);
+        gains = new float[cloths.Length];
+        for (int i = 0; i < cloths.Length; i++)
+        {
+            var g = cloths[i].GetComponentInParent<WindGain>();
+            gains[i] = g != null ? g.gain : 1f;
+        }
     }
 
     // BreezeZone에서 부름: amount만큼 세게, seconds 동안 서서히 잦아듦
@@ -65,11 +72,13 @@ public class PeureuWind : MonoBehaviour
         Vector3 dir = direction.sqrMagnitude > 0f ? direction.normalized : Vector3.right;
 
         if (cloths == null) return;
-        foreach (var c in cloths)
+        for (int i = 0; i < cloths.Length; i++)
         {
+            var c = cloths[i];
             if (c == null) continue;
-            c.externalAcceleration = dir * s;
-            c.randomAcceleration = Vector3.one * (s * flutter);
+            float g = (gains != null && i < gains.Length) ? gains[i] : 1f;
+            c.externalAcceleration = dir * (s * g);
+            c.randomAcceleration = Vector3.one * (s * Mathf.Sqrt(g) * flutter);
         }
     }
 
