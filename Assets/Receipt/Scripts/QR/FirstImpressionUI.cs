@@ -6,6 +6,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 // [역할] 체험 6단계(첫인상 남기기) → 7단계(뜻과 마주하기 + QR 영수증)
 //   화면 전체를 코드로 만든다. 씬에 이 스크립트 하나 붙이고 폰트만 넣으면 됨.
@@ -34,15 +37,34 @@ public class FirstImpressionUI : MonoBehaviour
     [Header("설정")]
     public int requiredCount = 3;
     public int maxChars = 30;
-    [Tooltip("QR이 뜬 뒤 몇 초 후 처음(우주)으로 돌아갈지")]
+    [Tooltip("QR이 뜬 뒤 아무도 키를 안 누르면 몇 초 후 우주로 돌아갈지 (0이면 자동으로 안 돌아감)")]
     public float resetAfterSeconds = 60f;
 
-    [Tooltip("느낌 단어와 점 색. 여기 순서대로 5개씩 2줄로 배치된다")]
-    public List<Feeling> feelings = new List<Feeling>
+    [Header("단어 뒤 빛")]
+    public bool showWordGlow = true;
+    [Range(0f, 0.5f)] public float wordGlowAlpha = 0.12f;
+
+    [Tooltip("느낌 단어와 점 색. 여기 순서대로 5개씩 2줄로 배치된다\n(코드 기본값으로 되돌리려면 컴포넌트 ⋮ → 느낌 목록 기본값으로)")]
+    public List<Feeling> feelings = DefaultFeelings();
+
+    static List<Feeling> DefaultFeelings() => new List<Feeling>
     {
-        F("설렘", "#FF8FB1"), F("따뜻함", "#FFB066"), F("포근함", "#FFD27A"), F("생동감", "#9BE07A"), F("신비로움", "#C08CFF"),
-        F("고요함", "#6E97FF"), F("그리움", "#8DB8F0"), F("아련함", "#E7A6D6"), F("쓸쓸함", "#A99BE0"), F("낯섦", "#5FD6C0"),
+        F("설렘", "#F58FB1"), F("가벼움", "#BFE3F7"), F("서늘함", "#7FA8E8"), F("쓸쓸함", "#9B8FD9"), F("풍성함", "#F5B04A"),
+        F("날카로움", "#5FD0DC"), F("정겨움", "#F2A07B"), F("생동감", "#8FDB6F"), F("아늑함", "#E8C27A"), F("고요함", "#6E7FE0"),
     };
+
+    // 씬에 이미 저장된 옛 목록을 코드의 새 목록으로 바꿀 때 (Play 멈춘 상태에서 누르고 Ctrl+S)
+    [ContextMenu("느낌 목록 기본값으로")]
+    void ResetFeelingsToDefault()
+    {
+#if UNITY_EDITOR
+        UnityEditor.Undo.RecordObject(this, "느낌 목록 기본값");
+#endif
+        feelings = DefaultFeelings();
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
+    }
 
     public event Action Finished; // 체험 끝 → 우주 화면으로 돌아가기
 
@@ -86,6 +108,8 @@ public class FirstImpressionUI : MonoBehaviour
     Image _inputLine;
     Button _submit;
     RawImage _qrImage;
+    Image _wordGlow;
+    bool _receiptReady;
     Coroutine _countdown;
     Vector2 _meaningPos, _counterPos;
 
@@ -113,7 +137,9 @@ public class FirstImpressionUI : MonoBehaviour
         _countdown = null;
         _word = word;
         _meaning = meaning;
+        _receiptReady = false;
         _wordText.text = word;
+        FitWordGlow();
 
         foreach (var c in _chips) { c.on = false; c.rt.localScale = Vector3.one; UpdateChip(c); }
         ((RectTransform)_meaningGroup.transform).anchoredPosition = _meaningPos;
@@ -226,9 +252,34 @@ public class FirstImpressionUI : MonoBehaviour
     void OnReceiptReady(string url)
     {
         if (_state != State.Result) return;
-        _qrStatus.text = "";
+        _receiptReady = true;
+        _qrStatus.text = BackHint(0);
         if (_countdown != null) StopCoroutine(_countdown);
-        _countdown = StartCoroutine(Countdown());
+        if (resetAfterSeconds > 0f) _countdown = StartCoroutine(Countdown());
+    }
+
+    // QR이 뜬 뒤 Space / ESC → 바로 우주로
+    void Update()
+    {
+        if (_state == State.Result && _receiptReady && BackPressed()) Close();
+    }
+
+    static bool BackPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var kb = Keyboard.current;
+        if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.escapeKey.wasPressedThisFrame)) return true;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Escape)) return true;
+#endif
+        return false;
+    }
+
+    string BackHint(int secondsLeft)
+    {
+        string key = $"<color=#{ColorUtility.ToHtmlStringRGB(C_TEXT)}><b>Space</b></color> 키를 누르면 우주로 돌아가요";
+        return secondsLeft > 0 ? $"{key}  <size=80%>({secondsLeft})</size>" : key;
     }
 
     void OnReceiptFailed()
@@ -249,7 +300,7 @@ public class FirstImpressionUI : MonoBehaviour
         float left = resetAfterSeconds;
         while (left > 0f)
         {
-            _qrStatus.text = $"{Mathf.CeilToInt(left)}초 뒤 우주로 돌아가요";
+            _qrStatus.text = BackHint(Mathf.CeilToInt(left));
             yield return new WaitForSeconds(1f);
             left -= 1f;
         }
@@ -310,9 +361,9 @@ public class FirstImpressionUI : MonoBehaviour
         step.characterSpacing = 18;
         Place(step.rectTransform, 72, 34, 500, 30);
 
-        // 단어 뒤 은은한 빛 (이미지로)
-        var wordGlow = NewImage("WordGlow", panel, Soft(60, 90), new Color(0.56f, 0.64f, 1f, 0.16f), true);
-        Place(wordGlow.rectTransform, 40 - 60, 70 - 60, 420 + 120, 170 + 120);
+        // 단어 뒤 은은한 빛 (이미지로) — 크기는 Open()에서 단어 길이에 맞춰 다시 정함
+        _wordGlow = NewImage("WordGlow", panel, Soft(60, 90), new Color(0.56f, 0.64f, 1f, wordGlowAlpha), true);
+        Place(_wordGlow.rectTransform, 40 - 60, 70 - 60, 420 + 120, 170 + 120);
 
         _wordText = NewText("Word", panel, "", 180, Color.white, TextAlignmentOptions.TopLeft, true);
         _wordText.enableAutoSizing = true;
@@ -388,7 +439,7 @@ public class FirstImpressionUI : MonoBehaviour
         qrGo.SetActive(false);
 
         _qrStatus = NewText("QrStatus", result, "", 19, C_SUB, TextAlignmentOptions.Top);
-        Place(_qrStatus.rectTransform, 1190, 440, 340, 40);
+        Place(_qrStatus.rectTransform, 1150, 436, 420, 64);
 
         SetGroup(_resultGroup, 0f);
         SetGroup(_meaningGroup, 0f);
@@ -527,6 +578,24 @@ public class FirstImpressionUI : MonoBehaviour
         cb.disabledColor = Color.white; // 비활성은 CanvasGroup 알파로 표현
         _submit.colors = cb;
         _submit.onClick.AddListener(OnSubmit);
+    }
+
+    // 단어 뒤 빛을 실제 글자 폭에 맞춘다 (긴 단어도 빛이 글자 전체를 고르게 감싸게)
+    void FitWordGlow()
+    {
+        if (_wordGlow == null) return;
+        _wordGlow.gameObject.SetActive(showWordGlow);
+        if (!showWordGlow) return;
+
+        _wordText.ForceMeshUpdate();
+        Bounds b = _wordText.textBounds;              // 글자 영역 (텍스트 왼쪽 위 기준)
+        float w = Mathf.Max(160f, b.size.x);
+        float h = Mathf.Max(110f, b.size.y);
+        float cx = 64f + b.center.x;                  // 패널 왼쪽 위 기준 중심
+        float cy = 62f - b.center.y;
+        const float pad = 80f;
+        Place(_wordGlow.rectTransform, cx - w / 2f - pad, cy - h / 2f - pad, w + pad * 2f, h + pad * 2f);
+        _wordGlow.color = new Color(0.56f, 0.64f, 1f, wordGlowAlpha);
     }
 
     void BuildStars(RectTransform panel)
