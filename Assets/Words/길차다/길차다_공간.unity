@@ -269125,7 +269125,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GilchadaWalk
   eyeHeight: 1.7
-  walkSpeed: 3
+  walkSpeed: 7
   groundFollow: 10
   pathHalfWidth: 3
   pathStartZ: -20
@@ -269135,7 +269135,7 @@ MonoBehaviour:
   entranceZone: {fileID: 1492295982}
   walkTo: {fileID: 1344071364}
   lookAt: {fileID: 977452340}
-  lookAtWorldTreeAuto: 1
+  lookAtWorldTreeAuto: 0
   introSeconds: 5
   introSpeed: 1
   introOnlyOnce: 1
@@ -287812,7 +287812,7 @@ Transform:
   m_GameObject: {fileID: 977452339}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 30, z: 106}
+  m_LocalPosition: {x: 0, y: 15, z: 106}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -486656,7 +486656,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Byeolmalsseum.ExperienceCamera
   startPoint: {fileID: 1727345827}
   path: {fileID: 0}
-  moveSpeed: 3
+  moveSpeed: 10
   fastMultiplier: 2.5
   acceleration: 8
   allowVertical: 1
