@@ -42,30 +42,30 @@ public class BreezeZone : MonoBehaviour
         FillPile();
     }
 
+    [Tooltip("체크하면 Console에 '발동!' 로그가 찍힘 (테스트용)")]
+    public bool debugLog = true;
+
     void Update()
     {
-        Camera cam = ActiveCamera();
-        if (cam == null) return;
+        // 켜져 있는 카메라 중 하나라도 원 안에 들어오면 발동
+        // (자유 이동 플레이어 카메라 / 체험 카메라 / 작업용 카메라 어느 쪽이든)
+        bool now = false;
+        foreach (var cam in Camera.allCameras)
+        {
+            if (!cam.isActiveAndEnabled) continue;
+            Vector3 d = cam.transform.position - transform.position;
+            if ((d.x * d.x + d.z * d.z) < radius * radius && d.y < maxHeight && d.y > -2f) { now = true; break; }
+        }
 
-        Vector3 d = cam.transform.position - transform.position;
-        bool now = (d.x * d.x + d.z * d.z) < radius * radius && d.y < maxHeight;
         if (now && !inside && Time.time - lastTime > cooldown) Trigger();
         inside = now;
-    }
-
-    // 켜져 있는 카메라 중 Depth가 가장 큰 것 = 지금 화면에 보이는 카메라
-    static Camera ActiveCamera()
-    {
-        Camera best = null;
-        foreach (var c in Camera.allCameras)
-            if (c.isActiveAndEnabled && (best == null || c.depth > best.depth)) best = c;
-        return best;
     }
 
     [ContextMenu("지금 발동 (테스트)")]
     public void Trigger()
     {
         lastTime = Time.time;
+        if (debugLog) Debug.Log($"[퍼르르] {name} 발동! (Pile:{(pile ? pile.name : "없음")}, Burst:{(burst ? burst.name : "없음")})");
 
         if (pile != null)
         {
