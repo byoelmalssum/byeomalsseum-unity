@@ -117,6 +117,12 @@ public class FirstImpressionUI : MonoBehaviour
     void Start()
     {
         if (!font) { Debug.LogError("[별말씀] FirstImpressionUI: 한글 TMP 폰트를 넣어 주세요"); enabled = false; return; }
+#if UNITY_EDITOR
+        // 에디터에서 플레이하면 Dynamic 폰트 파일(Pretendard SDF.asset)에 새 글자가 쌓여서
+        // git에 폰트 변경이 계속 뜸 → 플레이 동안만 쓰는 '복사본 폰트'로 바꿔 씀. 원본 파일은 안 바뀜. (빌드엔 영향 없음)
+        font = PlayCopy(font);
+        if (boldFont) boldFont = PlayCopy(boldFont);
+#endif
         if (!receiptManager) { Debug.LogError("[별말씀] FirstImpressionUI: ReceiptManager를 연결해 주세요"); enabled = false; return; }
 
         Build();
@@ -678,6 +684,19 @@ public class FirstImpressionUI : MonoBehaviour
         img.raycastTarget = false;
         return img;
     }
+
+#if UNITY_EDITOR
+    static TMP_FontAsset PlayCopy(TMP_FontAsset src)
+    {
+        if (!src || !src.sourceFontFile) return src;
+        var copy = TMP_FontAsset.CreateFontAsset(src.sourceFontFile, 90, 9,
+            UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
+        if (!copy) return src;
+        copy.name = src.name + " (플레이용 복사본)";
+        copy.hideFlags = HideFlags.DontSave;
+        return copy;
+    }
+#endif
 
     TextMeshProUGUI NewText(string name, Transform parent, string text, float size, Color color, TextAlignmentOptions align, bool bold = false)
     {
