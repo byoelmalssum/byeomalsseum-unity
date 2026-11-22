@@ -82,7 +82,7 @@ public class NonteulTeaTerrace : MonoBehaviour
     readonly List<R2> strokes = new List<R2>();
     System.Random rng;
 
-    Material mGrass, mPath, mMud, mWater, mBladeGrass, mBladeSeed, mStone;
+    Material mGrass, mPath, mMud, mWater, mBladeGrass, mBladeSeed, mStone, mWallStone;
     Material[] mTea = new Material[3];
 
     // ==================================================================
@@ -200,14 +200,18 @@ public class NonteulTeaTerrace : MonoBehaviour
         var sp = ws != null && ws.experienceCamera != null ? ws.experienceCamera.startPoint : null;
         if (sp != null)
         {
-            var a = transform.InverseTransformPoint(sp.position); var f = transform.InverseTransformDirection(sp.forward);
-            float L = Mathf.Max(ZoneLevel(a.x, a.z), ZoneLevel(a.x + f.x * 1.2f, a.z + f.z * 1.2f));
-            if (L > 0f)
+            // 시작할 때 글자가 앞의 단 벽에 가리지 않게, 앞쪽 단보다 2.4m 높은 곳에서 시작해요
+            var a = transform.InverseTransformPoint(sp.position); var f = transform.InverseTransformDirection(sp.forward); f.y = 0;
+            f = f.sqrMagnitude > 1e-6f ? f.normalized : Vector3.forward; var sd = new Vector3(f.z, 0, -f.x);
+            float L = 0f;
+            for (float fw = 0f; fw <= 12f; fw += 1f) for (float sw = -5f; sw <= 5f; sw += 1f) L = Mathf.Max(L, ZoneLevel(a.x + f.x * fw + sd.x * sw, a.z + f.z * fw + sd.z * sw));
+            float want = L + 2.4f;
+            if (L > 0f && a.y < want)
             {
 #if UNITY_EDITOR
                 if (!Application.isPlaying) Undo.RecordObject(sp, "시작 지점 높이기");
 #endif
-                liftedStart = sp; startOrigPos = sp.position; sp.position += up * L; MarkDirty(sp);
+                liftedStart = sp; startOrigPos = sp.position; a.y = want; sp.position = transform.TransformPoint(a); MarkDirty(sp);
             }
         }
     }
@@ -235,10 +239,10 @@ public class NonteulTeaTerrace : MonoBehaviour
             || !Mathf.Approximately(ZoneLevel(x, z + m), L) || !Mathf.Approximately(ZoneLevel(x, z - m), L);
     }
 
-    // 단 덩어리: 윗면(풀) + 돌로 쌓은 옆벽 + 모서리 풀
+    // 단 덩어리: 윗면(풀) + 울퉁불퉁한 돌담 옆벽 + 흙·풀 턱 + 늘어진 풀
     void BuildZoneBlocks(Transform root)
     {
-        var top = new MB(1); var wall = new MB(1); var grass = new MB(1);
+        var top = new MB(1); var wall = new MB(1); var lip = new MB(1); var grass = new MB(1);
         foreach (var Z in ZONES)
         {
             float L = Z.L * levelScale; var r = Z.r;
@@ -254,32 +258,51 @@ public class NonteulTeaTerrace : MonoBehaviour
             foreach (var e in edges)
             {
                 Vector2 a = e.Item1, b = e.Item2, o = e.Item3; float len = Vector2.Distance(a, b);
-                int n = Mathf.Max(1, Mathf.CeilToInt(len / 0.5f));
+                int n = Mathf.Max(1, Mathf.CeilToInt(len / 0.35f));
                 var nrm = new Vector3(o.x, 0, o.y);
-                for (int i = 0; i < n; i++)
+                int prevCol = -1, prevRows = -1; float prevLow = -1f;
+                int prevLip = -1;
+                for (int i = 0; i <= n; i++)
                 {
-                    var p0 = Vector2.Lerp(a, b, i / (float)n); var p1 = Vector2.Lerp(a, b, (i + 1) / (float)n); var mid = (p0 + p1) * 0.5f;
-                    float low = ZoneLevel(mid.x + o.x * 0.05f, mid.y + o.y * 0.05f);
-                    if (low >= L - 0.01f) continue;
-                    float u0 = Vector2.Distance(a, p0), u1 = u0 + Vector2.Distance(p0, p1);
-                    int q = wall.v.Count;
-                    wall.Add(new Vector3(p0.x, low - 0.02f, p0.y), nrm, new Vector2(u0, low)); wall.Add(new Vector3(p1.x, low - 0.02f, p1.y), nrm, new Vector2(u1, low));
-                    wall.Add(new Vector3(p1.x, L, p1.y), nrm, new Vector2(u1, L)); wall.Add(new Vector3(p0.x, L, p0.y), nrm, new Vector2(u0, L));
-                    wall.Tri(0, q, q + 1, q + 2); wall.Tri(0, q, q + 2, q + 3);
-                    // 위 모서리에 늘어진 풀, 아래 밑동 풀
-                    for (int g = 0; g < 2; g++)
+                    float t = i / (float)n; var p = Vector2.Lerp(a, b, t); float u = len * t;
+                    // 모서리 바로 바깥 땅 높이 (모서리에서는 살짝 안쪽 점으로 재요)
+                    var probe = Vector2.Lerp(a, b, Mathf.Clamp(t, 0.5f / n, 1f - 0.5f / n));
+                    float low = ZoneLevel(probe.x + o.x * 0.05f, probe.y + o.y * 0.05f);
+                    if (low >= L - 0.01f) { prevCol = -1; prevLip = -1; continue; }
+                    int rows = Mathf.Max(1, Mathf.CeilToInt((L - low) / 0.3f));
+                    if (prevCol >= 0 && (rows != prevRows || !Mathf.Approximately(low, prevLow))) prevCol = -1; // 아래 땅 높이가 바뀌면 끊어요
+                    int col = wall.v.Count;
+                    for (int j = 0; j <= rows; j++)
                     {
-                        var pt = Vector2.Lerp(p0, p1, R(0f, 1f));
-                        if (rng.NextDouble() < 0.85 * grassAmount) Ribbons(grass, new Vector3(pt.x - o.x * 0.06f, L - 0.02f, pt.y - o.y * 0.06f), R(0.25f, 0.5f), 6, 0.15f, 1.2f, 0.022f);
-                        if (rng.NextDouble() < 0.6 * grassAmount) Ribbons(grass, new Vector3(pt.x + o.x * 0.1f, low + LIFT, pt.y + o.y * 0.1f), R(0.3f, 0.6f), 7, 0.2f, 0.5f, 0.024f);
+                        float y = Mathf.Lerp(low - 0.05f, L, j / (float)rows);
+                        float edgeFade = Mathf.Min(1f, Mathf.Min(u, len - u) / 0.3f);              // 모서리 끝은 납작하게 맞춰요
+                        float bulge = (0.07f * (Noise(u * 2.3f + Z.L * 11f, y * 2.3f) - 0.5f) * 2f + 0.04f * Mathf.Sin(j / (float)rows * Mathf.PI)) * edgeFade;
+                        var pos = new Vector3(p.x, y, p.y) + nrm * bulge;
+                        wall.Add(pos, nrm, new Vector2(u, y));
                     }
+                    if (prevCol >= 0)
+                        for (int j = 0; j < rows; j++) { int c0 = prevCol + j, c1 = col + j; wall.Tri(0, c0, c1, c0 + 1); wall.Tri(0, c1, c1 + 1, c0 + 1); }
+                    prevCol = col; prevRows = rows; prevLow = low;
+
+                    // 윗모서리 흙·풀 턱 (둥글게 살짝 튀어나와요)
+                    int lp = lip.v.Count;
+                    var e0 = new Vector3(p.x, L + 0.015f, p.y) - nrm * 0.12f; var e1 = new Vector3(p.x, L - 0.02f, p.y) + nrm * 0.1f; var e2 = new Vector3(p.x, L - 0.16f, p.y) + nrm * 0.11f;
+                    lip.Add(e0, Vector3.up, new Vector2(u, 0)); lip.Add(e1, (Vector3.up + nrm).normalized, new Vector2(u, 0.25f)); lip.Add(e2, nrm, new Vector2(u, 0.4f));
+                    if (prevLip >= 0) { lip.Tri(0, prevLip, lp, prevLip + 1); lip.Tri(0, lp, lp + 1, prevLip + 1); lip.Tri(0, prevLip + 1, lp + 1, prevLip + 2); lip.Tri(0, lp + 1, lp + 2, prevLip + 2); }
+                    prevLip = lp;
+
+                    // 늘어진 풀 · 밑동 풀 · 벽 틈 풀
+                    if (rng.NextDouble() < 0.9 * grassAmount) Ribbons(grass, new Vector3(p.x, L - 0.04f, p.y) + nrm * 0.08f, R(0.3f, 0.6f), 7, 0.18f, 1.4f, 0.022f);
+                    if (rng.NextDouble() < 0.7 * grassAmount) Ribbons(grass, new Vector3(p.x, low + LIFT, p.y) + nrm * R(0.08f, 0.25f), R(0.3f, 0.6f), 7, 0.2f, 0.5f, 0.024f);
+                    if (L - low > 1f && rng.NextDouble() < 0.18 * grassAmount) Ribbons(grass, new Vector3(p.x, R(low + 0.3f, L - 0.3f), p.y) + nrm * 0.06f, R(0.12f, 0.25f), 5, 0.1f, 1.0f, 0.016f);
                 }
             }
         }
         var holder = new GameObject("글자 단 (층층이)").transform; holder.SetParent(root, false);
         Emit(holder, "단 윗면", top, new[] { mGrass }, ShadowCastingMode.On, true);
-        Emit(holder, "단 돌벽", wall, new[] { mStone != null ? mStone : mPath }, ShadowCastingMode.On, true);
-        Emit(holder, "단 모서리 풀", grass, new[] { mBladeGrass }, ShadowCastingMode.Off, false, false);
+        Emit(holder, "단 돌담", wall, new[] { mWallStone != null ? mWallStone : mPath }, ShadowCastingMode.On, true);
+        Emit(holder, "단 흙턱", lip, new[] { mGrass }, ShadowCastingMode.On, true);
+        Emit(holder, "단 풀", grass, new[] { mBladeGrass }, ShadowCastingMode.Off, false, false);
     }
 
     // 빛가루 길이 단 속에 묻히지 않게 단 높이만큼 올려요
@@ -661,11 +684,6 @@ public class NonteulTeaTerrace : MonoBehaviour
             {
                 Vector2 o = PerimeterPoint(r, k / (float)n, 0.1f);
                 if (!InStroke(o.x, o.y, 0.02f)) Ribbons(grass, new Vector3(o.x, GroundAt(o.x, o.y), o.y), R(0.28f, 0.55f), 7, 0.18f, 0.5f, 0.022f);
-                if (rng.NextDouble() < 0.5)
-                {
-                    Vector2 t = PerimeterPoint(r, (k + 0.5f) / n, -0.07f);
-                    Ribbons(grass, new Vector3(t.x, r.top - 0.02f, t.y), R(0.14f, 0.28f), 5, 0.12f, 0.6f, 0.018f);
-                }
             }
         }
         // 논 칸 밖 빈 땅
@@ -734,6 +752,9 @@ public class NonteulTeaTerrace : MonoBehaviour
             var stTex = GetTex("돌담_색", false, MakeStoneAlbedo);
             var stN = GetTex("돌담_노멀", true, () => NormalFrom(StoneHeight(512), 512, 8f, "돌담_노멀"));
             mStone = GetMat("다원_돌담", Color.white, stTex, stN, 0.18f, 1.2f, Vector2.one * 0.55f);
+            var wTex = GetTex("단돌담_색", false, MakeDryStoneAlbedo);
+            var wN = GetTex("단돌담_노멀", true, () => NormalFrom(DryStoneHeight(512), 512, 9f, "단돌담_노멀"));
+            mWallStone = GetMat("단_돌담", Color.white, wTex, wN, 0.15f, 1.4f, Vector2.one / 2.6f);
         }
     }
 
@@ -804,6 +825,55 @@ public class NonteulTeaTerrace : MonoBehaviour
     }
 
     // 돌담: 둥근 돌 + 흙 틈 + 이끼
+    // 자연스러운 막돌 담: 크기·모양이 제각각인 돌, 가는 흙 틈, 이끼와 흙때
+    static void DryStone(float u, float v, out float stone, out float dome, out int id)
+    {
+        const int G = 9, GY = 12;
+        float wx = FbmP(u * 6, v * 6, 6, 2) - 0.5f, wy = FbmP(u * 6 + 3.3f, v * 6 + 1.7f, 6, 2) - 0.5f;
+        float px = (u + wx * 0.06f) * G, py = (v + wy * 0.06f) * GY;
+        int cx = Mathf.FloorToInt(px), cy = Mathf.FloorToInt(py); float f1 = 9, f2 = 9; id = 0;
+        for (int a = -1; a <= 1; a++)
+            for (int b = -1; b <= 1; b++)
+            {
+                int gx = cx + a, gy = cy + b, wxI = ((gx % G) + G) % G, wyI = ((gy % GY) + GY) % GY;
+                float fx = gx + 0.1f + 0.8f * Hash(wxI, wyI), fy = gy + 0.1f + 0.8f * Hash(wxI + 31, wyI + 57);
+                float dx = (px - fx) * 0.75f, dy = py - fy, d = Mathf.Sqrt(dx * dx + dy * dy);
+                if (d < f1) { f2 = f1; f1 = d; id = wxI * 131 + wyI; } else if (d < f2) f2 = d;
+            }
+        stone = Smooth01((f2 - f1 - 0.025f) / 0.07f);
+        dome = Mathf.Sqrt(Mathf.Clamp01(1f - f1 * 1.2f));
+    }
+    static float[] DryStoneHeight(int S)
+    {
+        var h = new float[S * S];
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float u = x / (float)S, v = y / (float)S; DryStone(u, v, out float st, out float dm, out _);
+                h[y * S + x] = st * (0.55f + 0.3f * dm + 0.15f * FbmP(u * 40, v * 40, 40, 3));
+            }
+        return h;
+    }
+    static Texture2D MakeDryStoneAlbedo()
+    {
+        const int S = 512; var t = NewTex(S, false); var px = new Color[S * S];
+        Color[] tones = { new Color(0.52f, 0.50f, 0.46f), new Color(0.45f, 0.42f, 0.37f), new Color(0.60f, 0.56f, 0.49f), new Color(0.40f, 0.38f, 0.35f), new Color(0.55f, 0.48f, 0.40f) };
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float u = x / (float)S, v = y / (float)S; DryStone(u, v, out float st, out float dm, out int id);
+                Color sc = tones[(int)(Hash(id, 3) * tones.Length) % tones.Length] * (0.82f + 0.3f * FbmP(u * 32, v * 32, 32, 3)) * (0.9f + 0.15f * dm);
+                Color soil = new Color(0.27f, 0.22f, 0.16f) * (0.85f + 0.3f * FbmP(u * 20, v * 20, 20, 2));
+                Color c = Color.Lerp(soil, sc, st);
+                float moss = Smooth01((FbmP(u * 4, v * 4, 4, 3) - 0.56f) / 0.15f) * (1f - 0.4f * st);
+                c = Color.Lerp(c, new Color(0.24f, 0.31f, 0.13f), moss * 0.7f);
+                float lichen = Smooth01((FbmP(u * 24, v * 24, 24, 2) - 0.68f) / 0.08f) * st;
+                c = Color.Lerp(c, new Color(0.68f, 0.68f, 0.58f), lichen * 0.35f);
+                c.a = 1; px[y * S + x] = c;
+            }
+        t.SetPixels(px); t.Apply(true); return t;
+    }
+
     static void Voronoi(float px, float py, int G, out float f1, out float f2, out int id)
     {
         int cx = Mathf.FloorToInt(px), cy = Mathf.FloorToInt(py); f1 = 9; f2 = 9; id = 0;
